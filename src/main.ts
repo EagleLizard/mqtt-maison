@@ -30,10 +30,10 @@ async function main() {
   let eArgs = parseArgs();
   switch(eArgs?.cmd) {
     case cmd_map.mqtt:
-      await (await import('./lib/cmd/mqtt-ezd/mqtt-ezd')).mqttEzdMain();
+      await (await import('./cmd/mqtt-ezd/mqtt-ezd')).mqttEzdMain();
       break;
     case cmd_map.etc:
-      await (await import('./lib/cmd/etc/etc-ezd')).etcEzdMain();
+      await (await import('./cmd/etc/etc-ezd')).etcEzdMain();
       break;
     default:
       printCmds();

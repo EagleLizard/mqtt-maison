@@ -28,6 +28,7 @@
   "dependencies": {
     "dotenv": "^17.0.1",
     "mqtt": "^5.13.1",
+    "pino": "^9.7.0",
     "source-map-support": "^0.5.21"
   }
 }

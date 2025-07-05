@@ -13,7 +13,7 @@ type MqttConfig = Record<MqttConfigKey, string> & {};
 
 export const ezdConfig = {
   getMqttConfig,
-  isDevEnv,
+  isDevEnv: isDevEnv,
   getEnvironment,
 } as const;
 
@@ -22,7 +22,7 @@ function isDevEnv() {
 }
 
 function getEnvironment() {
-  return process.env.ENVIRONMENT ?? DEV_ENV_STR;
+  return process.env.ENVIRONMENT;
 }
 
 function getMqttConfig(): MqttConfig {
