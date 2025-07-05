@@ -4,6 +4,7 @@
   "description": "This is a project to replace some MQTT-based Node-RED automations which required custom scripts to glue different workflow steps together.",
   "main": "index.js",
   "scripts": {
+    "dev": "node --watch --watch-preserve-output dist/main.js mqtt",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -25,6 +26,8 @@
     "typescript-eslint": "^8.35.1"
   },
   "dependencies": {
+    "dotenv": "^17.0.1",
+    "mqtt": "^5.13.1",
     "source-map-support": "^0.5.21"
   }
 }
