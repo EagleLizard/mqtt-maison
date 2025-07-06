@@ -1,5 +1,6 @@
 import mqtt from 'mqtt';
 import { EventRegistry } from '../../lib/events/event-registry';
+import { logger } from '../../lib/logger/logger';
 
 /*
 handle topic subscriptions and forward them to the handlers
@@ -79,8 +80,37 @@ export class MsgRouter {
       payload,
       packet,
     };
+    if(evtReg.eventCount() < 1) {
+      logger.info({
+        topic,
+        payload: payload.toString(),
+      });
+    }
     evtReg.fire(evt);
+    this.unsubIfNoHandlers(topic);
   };
+
+  private unsubIfNoHandlers(topic: string) {
+    /*
+    If there is an event registry that matches,
+    _*/
+    let evtReg: EventRegistry<MqttMsgEvt> | undefined;
+    let evtCount: number;
+    evtReg = this.topicEventMap.get(topic);
+    evtCount = evtReg?.eventCount() ?? 0;
+    if(evtCount > 0) {
+      return;
+    }
+    this.client.unsubscribe(topic, (err) => {
+      if(err) {
+        logger.error(err);
+        throw err;
+      }
+      /* clean up registry */
+      this.topicEventMap.delete(topic);
+      console.log(`unsubbed topic: ${topic}`);
+    });
+  }
 
   /*
   TODO: overload to take the same params as mqtt.Client.connect

@@ -27,3 +27,21 @@ For example, the track seek forward / back buttons can cycle through the modes. 
 
 `TODO`: map these out in a diagram and / or table
 
+## MQTT.js
+
+### Handling Topics with global `.on('message', cb)`
+
+> *some development notes*
+
+MQTT.js exposes a single `.on` for all messages from any topic.
+
+The intent here is to write some logic to perform a toggle. For most devices, toggle isn't an action that's explicitly exposed.
+In order to perform a toggle:
+1. we need to publish a z2m/device/get
+    1. Before sending, we subscribe to that device's topic
+    2. We should ignore any messages we get until we publish our message
+    3. After we publish, wait for exactly 1 message on the device topic
+    4. After we get a message, assume that it has the current state, and unsubscribe from that device's topic
+2. After we get the current state, we need to invert it (assuming it's a boolean toggle)
+    1. The way that would make the most sense would be to await the handshake from step 1 in the function
+    2. The way it's set up right now, all of the messages go through the handler in the main function. So to make step 1 awaitable, we need to create an abstraction that works with the message router / handler
