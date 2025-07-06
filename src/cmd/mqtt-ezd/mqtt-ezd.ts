@@ -3,6 +3,8 @@ import mqtt from 'mqtt';
 import { ezdConfig } from '../../config';
 import { logger } from '../../lib/logger/logger';
 import { EzdLogger } from '../../lib/logger/ezd-logger';
+import { MsgRouter } from './msg-router';
+import { sleep } from '../../lib/util/sleep';
 
 // TODO: make these configurable
 const z2m_topic_prefix = 'zigbee2mqtt';
@@ -36,27 +38,23 @@ export async function mqttEzdMain() {
   let client: mqtt.MqttClient;
   let actionsTopic: string;
   let handleMsg: mqtt.OnMessageCallback;
+  let msgRouter: MsgRouter;
   console.log('mqtt-ezd main ~');
   actionsTopic = `${z2m_topic_prefix}/${ikea_remote_name}/action`;
   client = await initClient();
-  logger.info('mqtt-ezd start');
-  client.on('message', (topic, payload, packet) => {
-    let ctx: MqttCtx;
-    ctx = {
-      client: client,
-      logger: logger,
-    };
-    return msgRouter(ctx, {
-      topic: topic,
-      payload: payload,
-      packet: packet,
+  msgRouter = await MsgRouter.init(client);
+  let actionsOffCb = await msgRouter.sub(actionsTopic, (evt) => {
+    let str = evt.payload.toString();
+    console.log({
+      topic: evt.topic,
+      payload: str,
     });
   });
-  client.subscribe(actionsTopic, (err, granted, packet) => {
-    if(err) {
-      logger.error(err);
-      return;
-    }
+  msgRouter.listen();
+  logger.info('mqtt-ezd start');
+  sleep(2e3).then(() => {
+    console.log('unlisten()');
+    msgRouter.unlisten();
   });
 }
 

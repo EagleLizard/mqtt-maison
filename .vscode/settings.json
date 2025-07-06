@@ -4,6 +4,7 @@
     "multistream",
     "Strs",
     "symfonisk",
+    "unlisten",
     "zigbee"
   ]
 }
