@@ -71,11 +71,23 @@ function msgRouter(ctx: MqttCtx, opts: MsgFnOpts): void {
   defaultMsgHandler(ctx, opts);
 }
 /* Parse the message and transform */
-function z2mMsgRouter(ctx: MqttCtx, opts: MsgFnOpts): void {
+function z2mMsgRouter(ctx: MqttCtx, opts: MsgFnOpts) {
+  let topic: string;
+  topic = opts.topic;
+  if(topic === `${z2m_topic_prefix}/${ikea_remote_name}/action`) {
+    ikeaRemoteMsgHandler(ctx, opts);
+    return;
+  }
+  z2mMsgHandler(ctx, opts);
+}
+
+function ikeaRemoteMsgHandler(ctx: MqttCtx, opts: MsgFnOpts): void {
   let logger: EzdLogger;
+  let client: mqtt.MqttClient;
   let topic: string;
   let payloadStr: string;
   logger = ctx.logger;
+  client = ctx.client;
   topic = opts.topic;
   payloadStr = opts.payload.toString();
   // console.log(`${topic}: ${payloadStr}`);
@@ -83,9 +95,58 @@ function z2mMsgRouter(ctx: MqttCtx, opts: MsgFnOpts): void {
     topic: topic,
     payload: payloadStr,
   });
+  if(payloadStr === 'toggle') {
+    console.log('toggle');
+    let getPayload = { state: '' };
+    /*
+    The intent here is to write some logic to perform a toggle. For most devices, toggle isn't
+      an action that's explicitly exposed.
+    In order to perform a toggle:
+      1. we need to publish a z2m/device/get
+        1.1. Before sending, we subscribe to that device's topic
+        1.2. We should ignore any messages we get until we publish our message
+        1.3. After we publish, wait for exactly 1 message on the device topic
+        1.4. After we get a message, assume that it has the current state, and
+          unsubscribe from that device's topic
+      2. After we get the current state, we need to invert it (assuming it's a
+        boolean toggle)
+        2.1. The way that would make the most sense would be to await the handshake
+          from step 1 in the function
+        2.2. The way it's set up right now, all of the messages go through the handler
+          in the main function. So to make step 1 awaitable, we need to create an
+          abstraction that works with the message router / handler
+    _*/
+    client.subscribe(`${z2m_topic_prefix}/croc`, (err) => {
+      if(err) {
+        logger.error(err);
+        return;
+      }
+    });
+    client.publish(`${z2m_topic_prefix}/croc/get`, JSON.stringify(getPayload), (err) => {
+      if(err) {
+        logger.error(err);
+        return;
+      }
+    });
+  }
   // console.log(`z2m message, topic: ${opts.topic}`);
-
 }
+
+function z2mMsgHandler(ctx: MqttCtx, opts: MsgFnOpts) {
+  let payloadStr: string;
+  let payload: unknown;
+  payloadStr = opts.payload.toString();
+  try {
+    payload = JSON.parse(payloadStr);
+  } catch {
+    payload = payloadStr;
+  }
+  ctx.logger.info({
+    topic: opts.topic,
+    payload: payload,
+  });
+}
+
 function defaultMsgHandler(ctx: MqttCtx, opts: MsgFnOpts): void {
   /*
     treat this as an error - we should only subscribe to messages we expect to handle
