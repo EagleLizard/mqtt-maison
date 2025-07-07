@@ -68,15 +68,12 @@ func ikeaMsgHandler(ctx MqttCtx, evt MsgEvt) {
 		deviceStateMsgCh := make(chan mqtt.Message)
 		/* subscribe once */
 		ctx.Client.Subscribe(deviceTopic, 0, func(c mqtt.Client, m mqtt.Message) {
-			defer func() {
-				ctx.Client.Unsubscribe(deviceTopic)
-			}()
-			// fmt.Printf("topic: %s\n", m.Topic())
-			// fmt.Printf("payload: %s\n", string(m.Payload()))
+			defer ctx.Client.Unsubscribe(deviceTopic)
 			deviceStateMsgCh <- m
 		})
 		deviceGetTopic := deviceTopic + "/get"
 		deviceGetPayloadStr, err := json.Marshal(deviceGetPayload)
+		fmt.Printf("%s\n", deviceGetPayloadStr)
 		if err != nil {
 			panic(err)
 		}

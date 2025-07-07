@@ -45,3 +45,45 @@ In order to perform a toggle:
 2. After we get the current state, we need to invert it (assuming it's a boolean toggle)
     1. The way that would make the most sense would be to await the handshake from step 1 in the function
     2. The way it's set up right now, all of the messages go through the handler in the main function. So to make step 1 awaitable, we need to create an abstraction that works with the message router / handler
+
+## Eclipse Paho MQTT Go client
+
+https://github.com/eclipse-paho/paho.mqtt.golang/tree/master
+
+### Motivation
+
+I was frustrated at the ergonomics of MQTT.js requiring a layer of abstraction on top of the base functionality in order to do pub / sub the way I was wanting.
+
+For example, the `zigbee2mqtt` flow for getting the current state of a switch requires publishing to the `zigbee2mqtt/device_name/get` with an empty state:
+
+```sh
+mosquitto_pub -t zigbee2mqtt/device_name/get -m "{\"state\": \"\"}"
+```
+
+This will tell the broker to emit a message on the corresponding `zigbee2mqtt/device_name` topic - which requires subscribing to that topic.
+
+In MQTT.js all messages have to route through the `'message'` event handler, which makes doing things like this difficult to reason with out-of-the-box.
+
+### Ergonomics
+
+It's go, so async operations are done via channels. I haven't poked around the internals yet, but I imagine topics are listened to in a goroutine.
+
+What is nice about this library is that subscriptions are defined in the same function call as the handler:
+
+```go
+topic1Fn := func(c mqtt.Client, m mqtt.Message) {
+    fmt.Print("only fires for ezd/topic1\n")
+}
+client.Subscribe("ezd/topic1", 0, false, topic1Fn)
+```
+
+This is a much more intuitive experience for the `zigbee2mqtt` get state case:
+
+```go
+z2mDeviceTopic := "z2m/device_name"
+client.Subscribe(z2mDeviceTopic, 0, false, func (c mqtt.Client, m mqtt.Message) {
+    defer client.Unsubscribe(z2mDeviceTopic)
+    z2mGetDeviceTopic := z2mDeviceTopic + "/get"
+    client.Publish(z2mGetDeviceTopic, "{\"state\":\"\"}")
+})
+```
