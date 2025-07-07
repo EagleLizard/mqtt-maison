@@ -29,29 +29,47 @@ func MqttEzdMain() {
 	if t := c.Connect(); t.Wait() && t.Error() != nil {
 		panic(t.Error())
 	}
-	msgCh := make(chan MsgEvt)
+	ikeaMsgCh := make(chan MsgEvt)
 	actionTopic := fmt.Sprintf("%s/%s/action", z2m_prefix, ikea_remote_name)
 	fn := func(client mqtt.Client, msg mqtt.Message) {
 		msgEvt := MsgEvt{msg.Topic(), msg.Payload()}
-		msgCh <- msgEvt
+		ikeaMsgCh <- msgEvt
 	}
 	if t := c.Subscribe(actionTopic, 0, fn); t.Wait() && t.Error() != nil {
 		panic(t.Error())
 	}
-	doneCh := make(chan struct{})
+	ikeaDoneCh := make(chan struct{})
 	ctx := MqttCtx{
 		Client: c,
 	}
+	/* target device listener for debugging _*/
+	deviceTargetMsgCh := make(chan MsgEvt)
+	deviceTargetTopic := z2m_prefix + "/" + z2m_device_target
+	deviceTargetFn := func(client mqtt.Client, msg mqtt.Message) {
+		deviceTargetMsgCh <- MsgEvt{msg.Topic(), msg.Payload()}
+	}
+	if t := c.Subscribe(deviceTargetTopic, 0, deviceTargetFn); t.Wait() && t.Error() != nil {
+		panic(t.Error())
+	}
+	deviceTargetDoneCh := make(chan struct{})
 	go func() {
 		receivedCount := 0
-		for msg := range msgCh {
+		for msg := range ikeaMsgCh {
 			fmt.Printf("action msg handler: topic: %s\n", msg.Topic)
 			ikeaMsgHandler(ctx, msg)
 			receivedCount++
 		}
-		doneCh <- struct{}{}
+		ikeaDoneCh <- struct{}{}
 	}()
-	<-doneCh
+	go func() {
+		for msg := range deviceTargetMsgCh {
+			/* This wont fire if unsubscribed elsewhere.. */
+			fmt.Printf("%s\n", msg.Topic)
+		}
+		deviceTargetDoneCh <- struct{}{}
+	}()
+	<-ikeaDoneCh
+	<-deviceTargetDoneCh
 }
 
 type Z2mBinaryState struct {
@@ -61,29 +79,7 @@ type Z2mBinaryState struct {
 func ikeaMsgHandler(ctx MqttCtx, evt MsgEvt) {
 	payloadStr := string(evt.Payload)
 	if payloadStr == "toggle" {
-		deviceTopic := z2m_prefix + "/" + z2m_device_target
-		deviceGetPayload := Z2mBinaryState{
-			State: "",
-		}
-		deviceStateMsgCh := make(chan mqtt.Message)
-		/* subscribe once */
-		ctx.Client.Subscribe(deviceTopic, 0, func(c mqtt.Client, m mqtt.Message) {
-			defer ctx.Client.Unsubscribe(deviceTopic)
-			deviceStateMsgCh <- m
-		})
-		deviceGetTopic := deviceTopic + "/get"
-		deviceGetPayloadStr, err := json.Marshal(deviceGetPayload)
-		fmt.Printf("%s\n", deviceGetPayloadStr)
-		if err != nil {
-			panic(err)
-		}
-		ctx.Client.Publish(deviceGetTopic, 0, false, deviceGetPayloadStr)
-		deviceStateMsg := <-deviceStateMsgCh
-		currDeviceState := Z2mBinaryState{}
-		err = json.Unmarshal(deviceStateMsg.Payload(), &currDeviceState)
-		if err != nil {
-			panic(err)
-		}
+		currDeviceState := getBinaryState(ctx, z2m_device_target)
 		var stateVal string
 		switch currDeviceState.State {
 		case "ON":
@@ -100,11 +96,31 @@ func ikeaMsgHandler(ctx MqttCtx, evt MsgEvt) {
 		if err != nil {
 			panic(err)
 		}
-		targetTopic := deviceTopic + "/set"
+		targetTopic := z2m_prefix + "/" + z2m_device_target + "/set"
 		fmt.Printf("targetTopic: %s\n", targetTopic)
 		fmt.Printf("targetPayload: %s\n", targetPayload)
 		ctx.Client.Publish(targetTopic, 0, false, targetPayload)
 	}
+}
+
+func getBinaryState(ctx MqttCtx, deviceName string) *Z2mBinaryState {
+	deviceTopic := z2m_prefix + "/" + deviceName
+	deviceStateMsgCh := make(chan mqtt.Message)
+	/* subscribe .once */
+	ctx.Client.Subscribe(deviceTopic, 0, func(c mqtt.Client, m mqtt.Message) {
+		defer ctx.Client.Unsubscribe(deviceTopic)
+		deviceStateMsgCh <- m
+	})
+	deviceGetTopic := deviceTopic + "/get"
+	deviceGetPayloadStr := "{\"state\":\"\"}"
+	ctx.Client.Publish(deviceGetTopic, 0, false, deviceGetPayloadStr)
+	deviceStateMsg := <-deviceStateMsgCh
+	currDeviceState := Z2mBinaryState{}
+	err := json.Unmarshal(deviceStateMsg.Payload(), &currDeviceState)
+	if err != nil {
+		panic(err)
+	}
+	return &currDeviceState
 }
 
 func initClient() mqtt.Client {
