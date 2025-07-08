@@ -10,6 +10,7 @@ type EzdLogFn = {
 /* logger interface */
 export type EzdLogger = {
   info: EzdLogFn;
+  warn: EzdLogFn;
   error: EzdLogFn;
   fatal: EzdLogFn;
 } & {};

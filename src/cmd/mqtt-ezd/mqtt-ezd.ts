@@ -12,6 +12,26 @@ const ikea_remote_name = 'symfonisk_remote';
 const z2m_device_target = 'croc';
 
 const maison_topic_prefix = 'ezd';
+const maison_action_topic = `${maison_topic_prefix}/etc`;
+
+const ikea_remote_actions = [
+  'toggle',
+  'volume_up',
+  'volume_down',
+  'track_next',
+  'track_previous',
+  'dots_1_initial_press',
+  'dots_1_short_release',
+  'dots_1_long_press',
+  'dots_1_long_release',
+  'dots_1_double_press',
+  'dots_2_initial_press',
+  'dots_2_long_press',
+  'dots_2_long_release',
+  'dots_2_double_press',
+];
+// ] as const;
+// type IkeaRemoteAction = typeof ikea_remote_actions[number];
 
 /* match params of mqtt.OnMessageCallback _*/
 type MsgFnOpts = {
@@ -24,6 +44,10 @@ type MqttCtx = {
   client: mqtt.MqttClient;
   logger: EzdLogger;
   msgRouter: MsgRouter;
+} & {};
+
+type MaisonActionPayload = {
+  action: string;
 } & {};
 
 /*
@@ -39,32 +63,82 @@ _*/
 export async function mqttEzdMain() {
   let client: mqtt.MqttClient;
   let actionsTopic: string;
-  let handleMsg: mqtt.OnMessageCallback;
   let msgRouter: MsgRouter;
+  let ctx: MqttCtx;
   console.log('mqtt-ezd main ~');
   actionsTopic = `${z2m_topic_prefix}/${ikea_remote_name}/action`;
   client = await initClient();
   msgRouter = await MsgRouter.init(client);
-  let actionsOffCb = await msgRouter.sub(actionsTopic, (evt) => {
-    let ctx: MqttCtx;
-    ctx = {
-      client,
-      logger,
-      msgRouter,
-    };
+  ctx = {
+    client,
+    logger,
+    msgRouter,
+  };
+  let ikeaActionsOffCb = await msgRouter.sub(actionsTopic, (evt) => {
     ikeaMsgHandler(ctx, evt);
+  });
+  let maisonActionsOffCb = await msgRouter.sub(maison_action_topic, (evt) => {
+    maisonMsgHandler(ctx, evt);
   });
   msgRouter.listen();
   logger.info('mqtt-ezd start');
 }
 
+async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
+  let payloadStr: string;
+  let payload: unknown;
+  payloadStr = evt.payload.toString();
+  try {
+    payload = JSON.parse(payloadStr);
+  } catch {
+    payload = payloadStr;
+  }
+  logger.info({
+    topic: evt.topic,
+    payload: payload,
+  });
+}
+
 async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
+  const action_map = new Map(Object.entries({
+    toggle: 'main',
+    volume_up: 'up',
+    volume_down: 'down',
+    track_next: 'next',
+    track_previous: 'prev',
+  }));
+  let payloadStr = evt.payload.toString();
+  let mappedAction: string | undefined;
+  mappedAction = action_map.get(payloadStr);
+  if(mappedAction === undefined) {
+    ctx.logger.warn({
+      topic: evt.topic,
+    }, `No mapping for action: ${payloadStr}`);
+    return;
+  }
+  let maisonActionPayload: MaisonActionPayload = {
+    action: mappedAction,
+  };
+  let maisonActionPayloadStr = JSON.stringify(maisonActionPayload);
+  let pubPromise: Promise<void>;
+  pubPromise = new Promise((resolve) => {
+    ctx.client.publish(maison_action_topic, maisonActionPayloadStr, (err) => {
+      if(err) {
+        ctx.logger.error(err);
+      }
+      resolve();
+    });
+  });
+  await pubPromise;
+}
+
+async function _ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   let payloadStr: string;
   payloadStr = evt.payload.toString();
-  console.log({
-    topic: evt.topic,
-    payloadStr: payloadStr,
-  });
+  // console.log({
+  //   topic: evt.topic,
+  //   payloadStr: payloadStr,
+  // });
   if(payloadStr === 'toggle') {
     let targetOffCb: OffCb;
     let stateVal: 'ON' | 'OFF' | 'TOGGLE';
@@ -132,7 +206,7 @@ function initClient(): Promise<mqtt.MqttClient> {
   let client = mqtt.connect(mqttCfg.mqtt_server, {
     username: mqttCfg.mqtt_user,
     password: mqttCfg.mqtt_password,
-    clientId: 'mqtt-maison',
+    clientId: 'mqtt-maison-ts',
   });
   p = new Promise((resolve, reject) => {
     let errCb: mqtt.OnErrorCallback;

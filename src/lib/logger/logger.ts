@@ -76,7 +76,7 @@ function initLogger(): Logger {
       bindings: (bindings) => {
         return {
           pid: bindings.pid,
-          host: bindings.hostname,
+          // host: bindings.hostname,
         };
       }
     },

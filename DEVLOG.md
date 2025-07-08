@@ -33,3 +33,5 @@ SUB z2m/remote/action
 SUB ezd/etc
   "toggle" -> PUB z2m/target/set {state: 'toggle'}
 ```
+
+or something like that.

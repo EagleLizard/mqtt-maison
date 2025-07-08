@@ -14,6 +14,9 @@ const z2m_prefix = "zigbee2mqtt"
 const ikea_remote_name = "symfonisk_remote"
 const z2m_device_target = "croc"
 
+const maison_topic_prefix = "ezd"
+const maison_action_topic = "etc"
+
 type MsgEvt struct {
 	Topic   string
 	Payload []byte
@@ -21,6 +24,7 @@ type MsgEvt struct {
 
 type MqttCtx struct {
 	Client mqtt.Client
+	Logger *slog.Logger
 }
 
 func MqttEzdMain() {
@@ -30,27 +34,28 @@ func MqttEzdMain() {
 		panic(t.Error())
 	}
 	ikeaMsgCh := make(chan MsgEvt)
-	actionTopic := fmt.Sprintf("%s/%s/action", z2m_prefix, ikea_remote_name)
-	fn := func(client mqtt.Client, msg mqtt.Message) {
-		msgEvt := MsgEvt{msg.Topic(), msg.Payload()}
-		ikeaMsgCh <- msgEvt
-	}
-	if t := c.Subscribe(actionTopic, 0, fn); t.Wait() && t.Error() != nil {
-		panic(t.Error())
-	}
+	// actionTopic := fmt.Sprintf("%s/%s/action", z2m_prefix, ikea_remote_name)
+	// fn := func(client mqtt.Client, msg mqtt.Message) {
+	// 	msgEvt := MsgEvt{msg.Topic(), msg.Payload()}
+	// 	ikeaMsgCh <- msgEvt
+	// }
+	// if t := c.Subscribe(actionTopic, 0, fn); t.Wait() && t.Error() != nil {
+	// 	panic(t.Error())
+	// }
 	ikeaDoneCh := make(chan struct{})
 	ctx := MqttCtx{
 		Client: c,
+		Logger: slog.New(slog.NewJSONHandler(os.Stdout, nil)),
 	}
 	/* target device listener for debugging _*/
 	deviceTargetMsgCh := make(chan MsgEvt)
-	deviceTargetTopic := z2m_prefix + "/" + z2m_device_target
-	deviceTargetFn := func(client mqtt.Client, msg mqtt.Message) {
-		deviceTargetMsgCh <- MsgEvt{msg.Topic(), msg.Payload()}
-	}
-	if t := c.Subscribe(deviceTargetTopic, 0, deviceTargetFn); t.Wait() && t.Error() != nil {
-		panic(t.Error())
-	}
+	// deviceTargetTopic := z2m_prefix + "/" + z2m_device_target
+	// deviceTargetFn := func(client mqtt.Client, msg mqtt.Message) {
+	// 	deviceTargetMsgCh <- MsgEvt{msg.Topic(), msg.Payload()}
+	// }
+	// if t := c.Subscribe(deviceTargetTopic, 0, deviceTargetFn); t.Wait() && t.Error() != nil {
+	// 	panic(t.Error())
+	// }
 	deviceTargetDoneCh := make(chan struct{})
 	go func() {
 		receivedCount := 0
@@ -68,8 +73,43 @@ func MqttEzdMain() {
 		}
 		deviceTargetDoneCh <- struct{}{}
 	}()
+	maisonDoneCh := subMaisonActions(ctx, c)
 	<-ikeaDoneCh
 	<-deviceTargetDoneCh
+	<-maisonDoneCh
+}
+
+type MaisonActionPayload struct {
+	Action string `json:"action`
+}
+
+func subMaisonActions(ctx MqttCtx, client mqtt.Client) chan struct{} {
+	msgCh := make(chan MsgEvt)
+	doneCh := make(chan struct{})
+	maisonTopic := maison_topic_prefix + "/" + maison_action_topic
+	fn := func(c mqtt.Client, m mqtt.Message) {
+		msgCh <- MsgEvt{m.Topic(), m.Payload()}
+	}
+	t := client.Subscribe(maisonTopic, 0, fn)
+	<-t.Done()
+	err := t.Error()
+	if err != nil {
+		panic(err)
+	}
+	go func() {
+		for msg := range msgCh {
+			maisonActionPayload := MaisonActionPayload{}
+			err := json.Unmarshal(msg.Payload, &maisonActionPayload)
+			if err != nil {
+				ctx.Logger.Error(msg.Topic, "error", err)
+				// panic(err)
+			}
+			ctx.Logger.Info("", slog.String("topic", msg.Topic), slog.String("payload", string(msg.Payload)))
+			// slog.Info("", slog.String("topic", msg.Topic), slog.String("payload", string(msg.Payload)))
+		}
+		doneCh <- struct{}{}
+	}()
+	return doneCh
 }
 
 type Z2mBinaryState struct {
@@ -134,7 +174,7 @@ func initClient() mqtt.Client {
 	mqtt.DEBUG = slog.NewLogLogger(slog.NewJSONHandler(os.Stdout, nil), slog.LevelDebug)
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(cfg.Server)
-	opts.SetClientID("mqtt-maison")
+	opts.SetClientID("mqtt-maison-go")
 	opts.SetUsername(cfg.User)
 	opts.SetPassword(cfg.Password)
 	opts.SetOrderMatters(false)
