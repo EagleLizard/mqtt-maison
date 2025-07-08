@@ -41,7 +41,12 @@ export class MsgRouter {
         already subscribed to, so we will subscribe every time
     _*/
     subPromise = new Promise((resolve, reject) => {
-      this.client.subscribe(topic, (err) => {
+      let subOpts: mqtt.IClientSubscribeOptions;
+      subOpts = {
+        /* TODO: make configurable */
+        qos: 0,
+      };
+      this.client.subscribe(topic, subOpts, (err) => {
         let offCb: OffCb;
         if(err) {
           return reject(err);

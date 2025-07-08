@@ -5,6 +5,8 @@ import { logger } from '../../lib/logger/logger';
 import { EzdLogger } from '../../lib/logger/ezd-logger';
 import { MqttMsgEvt, MsgRouter, OffCb } from './msg-router';
 import { prim } from '../../lib/util/validate-primitives';
+import { mqttUtil } from '../../lib/service/mqtt-util';
+import { EzdActionPayload } from '../../lib/models/ezd-action-payload';
 
 // TODO: make these configurable
 const z2m_topic_prefix = 'zigbee2mqtt';
@@ -30,6 +32,19 @@ const ikea_remote_actions = [
   'dots_2_long_release',
   'dots_2_double_press',
 ];
+
+/* TODO: load these from a config or DB */
+const maison_actions: MaisonAction[] = [
+  {
+    deviceName: 'croc',
+    action: { state: 'TOGGLE' },
+  },
+  {
+    deviceName: 'rabbit',
+    action: { state: 'TOGGLE' },
+  },
+];
+
 // ] as const;
 // type IkeaRemoteAction = typeof ikea_remote_actions[number];
 
@@ -46,8 +61,17 @@ type MqttCtx = {
   msgRouter: MsgRouter;
 } & {};
 
-type MaisonActionPayload = {
-  action: string;
+type MaisonAction = {
+  /*
+    Currently I'll target just the binary state features of devices,
+      which are available on switches and lights.
+    I want to extend this to include device-specific features,
+      e.g. brightness, color for lights
+  */
+  deviceName: string; // friendly name
+  action: {
+    state: 'ON' | 'OFF' | 'TOGGLE';
+  };
 } & {};
 
 /*
@@ -85,18 +109,30 @@ export async function mqttEzdMain() {
 }
 
 async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
-  let payloadStr: string;
-  let payload: unknown;
-  payloadStr = evt.payload.toString();
-  try {
-    payload = JSON.parse(payloadStr);
-  } catch {
-    payload = payloadStr;
-  }
+  let actionPayload: EzdActionPayload;
+  let pubPromises: Promise<void>[];
+  actionPayload = EzdActionPayload.parse(evt.payload);
   logger.info({
     topic: evt.topic,
-    payload: payload,
+    payload: actionPayload,
   });
+  pubPromises = [];
+  for(let i = 0; i < maison_actions.length; i++) {
+    let pubPromise: Promise<void>;
+    let maisonAction = maison_actions[i];
+    let z2mTopic = `${z2m_topic_prefix}/${maisonAction.deviceName}/set`;
+    let maisonMsg = JSON.stringify(maisonAction.action);
+    pubPromise = new Promise((resolve) => {
+      ctx.client.publish(z2mTopic, maisonMsg, (err) => {
+        if(err) {
+          ctx.logger.error(err, z2mTopic);
+        }
+        resolve();
+      });
+    });
+    pubPromises.push(pubPromise);
+  }
+  await Promise.all(pubPromises);
 }
 
 async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
@@ -116,7 +152,7 @@ async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
     }, `No mapping for action: ${payloadStr}`);
     return;
   }
-  let maisonActionPayload: MaisonActionPayload = {
+  let maisonActionPayload: EzdActionPayload = {
     action: mappedAction,
   };
   let maisonActionPayloadStr = JSON.stringify(maisonActionPayload);
@@ -174,12 +210,7 @@ async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string>
     let payloadStr: string;
     let payload: unknown;
     subOffCb();
-    payloadStr = evt.payload.toString();
-    try {
-      payload = JSON.parse(payloadStr);
-    } catch {
-      payload = payloadStr;
-    }
+    payload = mqttUtil.parsePayload(evt.payload);
     if(!prim.isObject(payload)) {
       return deferred.reject(
         new Error('Expected payload to be an object')
