@@ -3,10 +3,10 @@ import mqtt from 'mqtt';
 import { ezdConfig } from '../../config';
 import { logger } from '../../lib/logger/logger';
 import { EzdLogger } from '../../lib/logger/ezd-logger';
-import { MqttMsgEvt, MsgRouter, OffCb } from './msg-router';
+import { MqttMsgEvt, MsgRouter, OffCb, SubOpts } from './msg-router';
 import { prim } from '../../lib/util/validate-primitives';
 import { mqttUtil } from '../../lib/service/mqtt-util';
-import { EzdActionPayload } from '../../lib/models/ezd-action-payload';
+import { MaisonActionPayload } from '../../lib/models/ezd-action-payload';
 
 // TODO: make these configurable
 const z2m_topic_prefix = 'zigbee2mqtt';
@@ -45,16 +45,6 @@ const maison_actions: MaisonAction[] = [
   },
 ];
 
-// ] as const;
-// type IkeaRemoteAction = typeof ikea_remote_actions[number];
-
-/* match params of mqtt.OnMessageCallback _*/
-type MsgFnOpts = {
-  topic: string;
-  payload: Buffer;
-  packet: mqtt.IPublishPacket;
-} & {};
-
 type MqttCtx = {
   client: mqtt.MqttClient;
   logger: EzdLogger;
@@ -92,7 +82,7 @@ export async function mqttEzdMain() {
   console.log('mqtt-ezd main ~');
   actionsTopic = `${z2m_topic_prefix}/${ikea_remote_name}/action`;
   client = await initClient();
-  msgRouter = await MsgRouter.init(client);
+  msgRouter = await MsgRouter.init(client, logger);
   ctx = {
     client,
     logger,
@@ -109,30 +99,106 @@ export async function mqttEzdMain() {
 }
 
 async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
-  let actionPayload: EzdActionPayload;
+  let actionPayload: MaisonActionPayload;
   let pubPromises: Promise<void>[];
-  actionPayload = EzdActionPayload.parse(evt.payload);
+  actionPayload = MaisonActionPayload.parse(evt.payload);
   logger.info({
     topic: evt.topic,
     payload: actionPayload,
   });
-  pubPromises = [];
-  for(let i = 0; i < maison_actions.length; i++) {
-    let pubPromise: Promise<void>;
-    let maisonAction = maison_actions[i];
-    let z2mTopic = `${z2m_topic_prefix}/${maisonAction.deviceName}/set`;
-    let maisonMsg = JSON.stringify(maisonAction.action);
-    pubPromise = new Promise((resolve) => {
-      ctx.client.publish(z2mTopic, maisonMsg, (err) => {
-        if(err) {
-          ctx.logger.error(err, z2mTopic);
+  if(actionPayload.action === 'main') {
+    pubPromises = [];
+    for(let i = 0; i < maison_actions.length; i++) {
+      let actPromise: Promise<void>;
+      let maisonAction = maison_actions[i];
+      actPromise = (async () => {
+        let deviceState: string;
+        deviceState = await getBinaryState(ctx, maisonAction.deviceName);
+        console.log({
+          device: maisonAction.deviceName,
+          currState: deviceState,
+        });
+        if(deviceState === 'ON') {
+          await deviceOff(ctx, maisonAction.deviceName);
+        } else if(deviceState === 'OFF') {
+          console.log('off -> on');
+          await deviceOn(ctx, maisonAction.deviceName);
+        } else {
+          throw new Error(`Unexpected deviceState ${deviceState} for device ${maisonAction.deviceName}`);
         }
-        resolve();
-      });
-    });
-    pubPromises.push(pubPromise);
+      })();
+      pubPromises.push(actPromise);
+    }
+    await Promise.all(pubPromises);
   }
-  await Promise.all(pubPromises);
+  // ctx.logger.info({
+  //   topics: maison_actions.map((maisonAction) => maisonAction.deviceName),
+  // }, 'pub');
+}
+
+async function deviceOn(ctx: MqttCtx, deviceName: string) {
+  let currState: string;
+  currState = await getBinaryState(ctx, deviceName);
+  if(currState === 'ON') {
+    return;
+  }
+  let z2mPubTopic = `${z2m_topic_prefix}/${deviceName}/set`;
+  let pubMsg = 'ON';
+  let pubPromise: Promise<void>;
+  let subDeferred: PromiseWithResolvers<void>;
+  let z2mSubTopic = `${z2m_topic_prefix}/${deviceName}`;
+  subDeferred = Promise.withResolvers();
+  let offCb = await ctx.msgRouter.sub(z2mSubTopic, (evt) => {
+    /* wait for device to broadcast desired state _*/
+    let payload = mqttUtil.parsePayload(evt.payload);
+    if(prim.isObject(payload) && payload.state === pubMsg) {
+      offCb();
+      subDeferred.resolve();
+    }
+  });
+  pubPromise = new Promise((resolve) => {
+    ctx.client.publish(z2mPubTopic, pubMsg, (err) => {
+      if(err) {
+        ctx.logger.error(err);
+      }
+      resolve();
+    });
+  });
+  // await pubPromise;
+  // await subDeferred.promise;
+  await Promise.all([ pubPromise, subDeferred.promise ]);
+}
+
+async function deviceOff(ctx: MqttCtx, deviceName: string) {
+  let currState: string;
+  currState = await getBinaryState(ctx, deviceName);
+  if(currState === 'OFF') {
+    return;
+  }
+  let z2mPubTopic = `${z2m_topic_prefix}/${deviceName}/set`;
+  let pubMsg = 'OFF';
+  let pubPromise: Promise<void>;
+  let subDeferred: PromiseWithResolvers<void>;
+  let z2mSubTopic = `${z2m_topic_prefix}/${deviceName}`;
+  subDeferred = Promise.withResolvers();
+  let offCb = await ctx.msgRouter.sub(z2mSubTopic, (evt) => {
+    /* wait for device to broadcast desired state _*/
+    let payload = mqttUtil.parsePayload(evt.payload);
+    if(prim.isObject(payload) && payload?.state === pubMsg) {
+      offCb();
+      subDeferred.resolve();
+    }
+  });
+  pubPromise = new Promise((resolve) => {
+    ctx.client.publish(z2mPubTopic, pubMsg, (err) => {
+      if(err) {
+        ctx.logger.error(err);
+      }
+      resolve();
+    });
+  });
+  await pubPromise;
+  await subDeferred.promise;
 }
 
 async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
@@ -152,13 +218,21 @@ async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
     }, `No mapping for action: ${payloadStr}`);
     return;
   }
-  let maisonActionPayload: EzdActionPayload = {
+  let maisonActionPayload: MaisonActionPayload = {
     action: mappedAction,
   };
   let maisonActionPayloadStr = JSON.stringify(maisonActionPayload);
   let pubPromise: Promise<void>;
+  let pubOpts: mqtt.IClientPublishOptions;
+  pubOpts = {
+    qos: 0,
+  };
+  ctx.logger.info({
+    topic: maison_action_topic,
+    payload: maisonActionPayload,
+  }, 'publish');
   pubPromise = new Promise((resolve) => {
-    ctx.client.publish(maison_action_topic, maisonActionPayloadStr, (err) => {
+    ctx.client.publish(maison_action_topic, maisonActionPayloadStr, pubOpts, (err) => {
       if(err) {
         ctx.logger.error(err);
       }
@@ -168,35 +242,6 @@ async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   await pubPromise;
 }
 
-async function _ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
-  let payloadStr: string;
-  payloadStr = evt.payload.toString();
-  // console.log({
-  //   topic: evt.topic,
-  //   payloadStr: payloadStr,
-  // });
-  if(payloadStr === 'toggle') {
-    let targetOffCb: OffCb;
-    let stateVal: 'ON' | 'OFF' | 'TOGGLE';
-    /* get the state of a device */
-    let deviceState = await getBinaryState(ctx, z2m_device_target);
-    if(deviceState === 'ON') {
-      stateVal = 'OFF';
-    } else if(deviceState === 'OFF') {
-      stateVal = 'ON';
-    } else {
-      stateVal = 'TOGGLE';
-    }
-    let targetPayload = JSON.stringify({ state: stateVal });
-    let targetTopic = `${z2m_topic_prefix}/${z2m_device_target}/set`;
-    ctx.client.publish(targetTopic, targetPayload, (err) => {
-      if(err) {
-        ctx.logger.error(err);
-      }
-    });
-  }
-}
-
 /*
 effectively a .once() handler
 _*/
@@ -204,12 +249,16 @@ async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string>
   let deviceTopic: string;
   let subOffCb: OffCb;
   let deferred: PromiseWithResolvers<string>;
+  let subOpts: SubOpts;
+  let pubOpts: mqtt.IClientPublishOptions;
   deferred = Promise.withResolvers();
   deviceTopic = `${z2m_topic_prefix}/${deviceName}`;
-  subOffCb = await ctx.msgRouter.sub(deviceTopic, (evt) => {
-    let payloadStr: string;
+  subOpts = {
+    qos: 0,
+  };
+  subOffCb = await ctx.msgRouter.sub(deviceTopic, subOpts, (evt) => {
     let payload: unknown;
-    subOffCb();
+    // subOffCb();
     payload = mqttUtil.parsePayload(evt.payload);
     if(!prim.isObject(payload)) {
       return deferred.reject(
@@ -223,12 +272,18 @@ async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string>
     }
     deferred.resolve(payload.state);
   });
-  ctx.client.publish(`${deviceTopic}/get`, JSON.stringify({ state: '' }), (err) => {
+  pubOpts = {
+    qos: 0,
+  };
+  let pubMsg = JSON.stringify({ state: '' });
+  ctx.client.publish(`${deviceTopic}/get`, pubMsg, pubOpts, (err) => {
     if(err) {
       return deferred.reject(err);
     }
   });
-  return deferred.promise;
+  let deviceState = await deferred.promise;
+  subOffCb();
+  return deviceState;
 }
 
 function initClient(): Promise<mqtt.MqttClient> {

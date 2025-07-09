@@ -1,36 +1,36 @@
 
-type RegisteredEvent<Evt = void> = {
+type RegisteredEventFn<Evt = void> = {
   id: string;
   fn: (evt: Evt) => void;
 };
 
 export class EventRegistry<Evt = void> {
-  private eventMap: Map<string, RegisteredEvent<Evt>>;
+  private eventFnMap: Map<string, RegisteredEventFn<Evt>>;
   private evtIdCounter: number;
   constructor() {
-    this.eventMap = new Map();
+    this.eventFnMap = new Map();
     this.evtIdCounter = 0;
   }
   register(fn: (evt: Evt) => void): () => void {
     let evtId = this.getNextEvtId();
-    this.eventMap.set(evtId, {
+    this.eventFnMap.set(evtId, {
       id: evtId,
       fn,
     });
     return () => {
-      this.eventMap.delete(evtId);
+      this.eventFnMap.delete(evtId);
     };
   }
   fire(evt: Evt) {
-    let evtIds = [ ...this.eventMap.keys() ];
+    let evtIds = [ ...this.eventFnMap.keys() ];
     for(let i = 0; i < evtIds.length; ++i) {
       let currId = evtIds[i];
-      let regEvt = this.eventMap.get(currId);
+      let regEvt = this.eventFnMap.get(currId);
       regEvt?.fn(evt);
     }
   }
-  eventCount(): number {
-    return this.eventMap.size;
+  eventFnCount(): number {
+    return this.eventFnMap.size;
   }
   private getNextEvtId(): string {
     return `${this.evtIdCounter++}`;

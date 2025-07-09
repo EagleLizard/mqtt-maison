@@ -5,6 +5,23 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [07/08/2025]
+
+I've implemented some basic toggling functionality for devices with binary state in Typescript.
+
+Currently, many messages can be fired in quick succession and send multiple simultaneous `TOGGLE` messages. I am testing with multiple devices, and I can get the devices out of sync by starting with them all in the same state and pressing the toggle button rapidly.
+
+This is to be expected because:
+
+1. By default MQTT messages are fire-and-forget; there's no handshake that verifies the message was received.
+    1. I'm wondering if this is something that I can fix by setting the `qos` value to `1` or `2` (default is `0`), or some other mechanism built into the MQTT protocol or broker
+2. The script doesn't track the current state of a device, nor does it sync device state when multiple devices are being toggled.
+3. The script doesn't track if any actions are in-flight or not before sending the next message.
+    1. This could be solved by doing something like a `debounce` to prevent messages from sending before a previous action completes. I could track if an action is in-flight with a mutex-like struct.
+    2. A queue could work if I can track when an action has successfully finished (e.g. messages delivered / devices reached desired state). This would theoretically prevent the case where multiple devices become out of sync.
+
+Note: I plan on solving this at an application-level first, but this would need to be implemented with a shared DB or similar if I ever have multiple instances running.
+
 ## [07/07/2025]
 
 I've written the same basic functionality in JS (TS) and Golang. The abstractions are not 1:1, but they could be. Currently I like the control and ergonomics I have in JS.
