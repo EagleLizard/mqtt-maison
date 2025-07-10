@@ -11,7 +11,6 @@ import { MaisonActionPayload } from '../../lib/models/ezd-action-payload';
 // TODO: make these configurable
 const z2m_topic_prefix = 'zigbee2mqtt';
 const ikea_remote_name = 'symfonisk_remote';
-const z2m_device_target = 'croc';
 
 const maison_topic_prefix = 'ezd';
 const maison_action_topic = `${maison_topic_prefix}/etc`;
@@ -34,14 +33,12 @@ const ikea_remote_actions = [
 ];
 
 /* TODO: load these from a config or DB */
-const maison_actions: MaisonAction[] = [
+const maison_devices: MaisonDevice[] = [
   {
-    deviceName: 'croc',
-    action: { state: 'TOGGLE' },
+    name: 'croc',
   },
   {
-    deviceName: 'rabbit',
-    action: { state: 'TOGGLE' },
+    name: 'rabbit',
   },
 ];
 
@@ -51,17 +48,14 @@ type MqttCtx = {
   msgRouter: MsgRouter;
 } & {};
 
-type MaisonAction = {
+type MaisonDevice = {
   /*
     Currently I'll target just the binary state features of devices,
       which are available on switches and lights.
     I want to extend this to include device-specific features,
       e.g. brightness, color for lights
   */
-  deviceName: string; // friendly name
-  action: {
-    state: 'ON' | 'OFF' | 'TOGGLE';
-  };
+  name: string; // friendly name
 } & {};
 
 /*
@@ -100,58 +94,74 @@ export async function mqttEzdMain() {
 
 async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   let actionPayload: MaisonActionPayload;
+  let binStatePromises: Promise<string>[];
   let pubPromises: Promise<void>[];
   actionPayload = MaisonActionPayload.parse(evt.payload);
-  logger.info({
+  ctx.logger.info({
     topic: evt.topic,
     payload: actionPayload,
   });
   if(actionPayload.action === 'main') {
+    let binStates: string[];
+    binStatePromises = [];
     pubPromises = [];
-    for(let i = 0; i < maison_actions.length; i++) {
+    for(let i = 0; i < maison_devices.length; i++) {
+      let binStatePromise: Promise<string>;
+      let device = maison_devices[i];
+      binStatePromise = getBinaryState(ctx, device.name);
+      binStatePromises.push(binStatePromise);
+    }
+    binStates = await Promise.all(binStatePromises);
+    let synced: boolean;
+    synced = binStates.slice(1).every(binState => {
+      return binState === binStates[0];
+    });
+    if(!synced) {
+      ctx.logger.warn('Devices out of sync');
+    }
+    for(let i = 0; i < maison_devices.length; i++) {
       let actPromise: Promise<void>;
-      let maisonAction = maison_actions[i];
-      actPromise = (async () => {
-        let deviceState: string;
-        deviceState = await getBinaryState(ctx, maisonAction.deviceName);
-        console.log({
-          device: maisonAction.deviceName,
-          currState: deviceState,
-        });
-        if(deviceState === 'ON') {
-          await deviceOff(ctx, maisonAction.deviceName);
-        } else if(deviceState === 'OFF') {
-          console.log('off -> on');
-          await deviceOn(ctx, maisonAction.deviceName);
-        } else {
-          throw new Error(`Unexpected deviceState ${deviceState} for device ${maisonAction.deviceName}`);
-        }
-      })();
+      let targetState: string;
+      let device = maison_devices[i];
+      let currState = binStates[i];
+      if(currState === 'ON') {
+        targetState = 'OFF';
+      } else if(currState === 'OFF') {
+        targetState = 'ON';
+      } else {
+        ctx.logger.error({
+          deviceName: device.name,
+          currState: currState,
+        }, 'unrecognized state');
+        throw new Error(`Unrecognized state ${currState} for device ${device.name}`);
+      }
+      actPromise = setBinaryState(ctx, device.name, targetState);
       pubPromises.push(actPromise);
     }
     await Promise.all(pubPromises);
   }
-  // ctx.logger.info({
-  //   topics: maison_actions.map((maisonAction) => maisonAction.deviceName),
-  // }, 'pub');
+  ctx.logger.info({
+    devices: maison_devices.map(device => device.name)
+  });
 }
 
-async function deviceOn(ctx: MqttCtx, deviceName: string) {
-  let currState: string;
-  currState = await getBinaryState(ctx, deviceName);
-  if(currState === 'ON') {
-    return;
+async function setBinaryState(ctx: MqttCtx, deviceName: string, stateStr: string): Promise<void> {
+  if(stateStr !== 'ON' && stateStr !== 'OFF') {
+    throw new Error(`Invalid state string '${stateStr}'`);
   }
   let z2mPubTopic = `${z2m_topic_prefix}/${deviceName}/set`;
-  let pubMsg = 'ON';
+  let z2mSubTopic = `${z2m_topic_prefix}/${deviceName}`;
+  let pubMsg = stateStr;
   let pubPromise: Promise<void>;
   let subDeferred: PromiseWithResolvers<void>;
-  let z2mSubTopic = `${z2m_topic_prefix}/${deviceName}`;
   subDeferred = Promise.withResolvers();
   let offCb = await ctx.msgRouter.sub(z2mSubTopic, (evt) => {
     /* wait for device to broadcast desired state _*/
     let payload = mqttUtil.parsePayload(evt.payload);
     if(prim.isObject(payload) && payload.state === pubMsg) {
+      /*
+      TODO: strictly validate payload shape
+      _*/
       offCb();
       subDeferred.resolve();
     }
@@ -164,41 +174,7 @@ async function deviceOn(ctx: MqttCtx, deviceName: string) {
       resolve();
     });
   });
-  // await pubPromise;
-  // await subDeferred.promise;
   await Promise.all([ pubPromise, subDeferred.promise ]);
-}
-
-async function deviceOff(ctx: MqttCtx, deviceName: string) {
-  let currState: string;
-  currState = await getBinaryState(ctx, deviceName);
-  if(currState === 'OFF') {
-    return;
-  }
-  let z2mPubTopic = `${z2m_topic_prefix}/${deviceName}/set`;
-  let pubMsg = 'OFF';
-  let pubPromise: Promise<void>;
-  let subDeferred: PromiseWithResolvers<void>;
-  let z2mSubTopic = `${z2m_topic_prefix}/${deviceName}`;
-  subDeferred = Promise.withResolvers();
-  let offCb = await ctx.msgRouter.sub(z2mSubTopic, (evt) => {
-    /* wait for device to broadcast desired state _*/
-    let payload = mqttUtil.parsePayload(evt.payload);
-    if(prim.isObject(payload) && payload?.state === pubMsg) {
-      offCb();
-      subDeferred.resolve();
-    }
-  });
-  pubPromise = new Promise((resolve) => {
-    ctx.client.publish(z2mPubTopic, pubMsg, (err) => {
-      if(err) {
-        ctx.logger.error(err);
-      }
-      resolve();
-    });
-  });
-  await pubPromise;
-  await subDeferred.promise;
 }
 
 async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {

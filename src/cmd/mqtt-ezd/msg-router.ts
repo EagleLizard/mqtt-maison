@@ -98,19 +98,20 @@ export class MsgRouter {
     evtReg = this.topicEventMap.get(topic);
     if(evtReg === undefined) {
       this.logger.warn((`No handlers for message received on topic: ${topic}`));
-      // return;
-      // throw new Error(`No handlers for message received on topic: ${topic}`);
     }
-    /*
-    TODO: unsubscribe the client if no handlers registered for it
-    _*/
     evt = {
       topic,
       payload,
       packet,
     };
     if(evtReg !== undefined && evtReg.eventFnCount() < 1) {
-      logger.info({
+      /*
+      TODO: noisy because some devices always broadcast immediately
+        before the client processes the unsubscribe. Could fix by tracking
+        when the last function was unsubscribed, and only logging this if a
+        message is received on that topic after some cooldown period.
+      _*/
+      logger.warn({
         topic,
       }, 'message with no handler');
     }
@@ -136,7 +137,6 @@ export class MsgRouter {
       }
       /* clean up registry */
       this.topicEventMap.delete(topic);
-      console.log(`unsubbed topic: ${topic}`);
     });
   }
 
