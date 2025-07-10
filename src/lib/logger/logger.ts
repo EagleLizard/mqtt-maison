@@ -1,6 +1,10 @@
 
-import pino, { DestinationStream, Logger, LoggerOptions, MultiStreamOptions, StreamEntry } from 'pino';
-import { APP_LOGGER_NAME, LOG_DIR_PATH, LOG_FILE_EXT } from '../../constants';
+import pino from 'pino';
+import {
+  APP_LOGGER_NAME,
+  LOG_DIR_PATH,
+  LOG_FILE_EXT,
+} from '../../constants';
 import path from 'node:path';
 import { ezdConfig } from '../../config';
 import { files } from '../util/files';
@@ -17,17 +21,18 @@ const level = (dev_env)
 _*/
 export const logger = initLogger();
 
-function initLogger(): Logger {
-  let logger: Logger;
-  let opts: LoggerOptions;
-  let streams: StreamEntry[];
+function initLogger(): pino.Logger {
+  let logger: pino.Logger;
+  let opts: pino.LoggerOptions;
+  let streams: pino.StreamEntry[];
+  let multistreamOpts: pino.MultiStreamOptions;
   let stream: pino.MultiStreamRes;
   let logFileName: string;
   let errorLogFileName: string;
   let logFilePath: string;
   let errorLogFilePath: string;
-  let logStream: DestinationStream;
-  let errorLogStream: DestinationStream;
+  let logStream: pino.DestinationStream;
+  let errorLogStream: pino.DestinationStream;
 
   files.mkdirIfNotExist(LOG_DIR_PATH);
 
@@ -60,7 +65,6 @@ function initLogger(): Logger {
   if(dev_env) {
     streams.push({ level: level, stream: process.stdout });
   }
-  let multistreamOpts: MultiStreamOptions;
   multistreamOpts = {
     // dedupe: true // send logs only to the stream with the higher level
   };

@@ -1,12 +1,12 @@
 import { mqttUtil } from '../service/mqtt-util';
 import { prim } from '../util/validate-primitives';
 
-export class EzdActionPayload {
+export class MaisonActionPayload {
   action: string;
   constructor(action: string) {
     this.action = action;
   }
-  static parse(rawVal: Buffer | unknown): EzdActionPayload {
+  static parse(rawVal: Buffer | unknown): MaisonActionPayload {
     if(rawVal instanceof Buffer) {
       rawVal = mqttUtil.parsePayload(rawVal);
     }
@@ -16,6 +16,6 @@ export class EzdActionPayload {
     if(!prim.isString(rawVal.action)) {
       throw new Error('Expected .action to be a string');
     }
-    return new EzdActionPayload(rawVal.action);
+    return new MaisonActionPayload(rawVal.action);
   }
 }

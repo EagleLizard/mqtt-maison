@@ -42,7 +42,7 @@ const config = [
       '@stylistic/no-trailing-spaces': [ 'error' ],
       '@stylistic/max-len': [ 'warn', {
         code: 100,
-        ignoreStrings: true,
+        // ignoreStrings: true,
         ignoreTemplateLiterals: true,
         ignoreComments: true,
       }],
