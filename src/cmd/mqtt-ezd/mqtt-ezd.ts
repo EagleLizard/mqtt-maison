@@ -6,7 +6,9 @@ import { EzdLogger } from '../../lib/logger/ezd-logger';
 import { MqttMsgEvt, MsgRouter, OffCb, SubOpts } from './msg-router';
 import { prim } from '../../lib/util/validate-primitives';
 import { mqttUtil } from '../../lib/service/mqtt-util';
-import { MaisonActionPayload } from '../../lib/models/ezd-action-payload';
+import { MaisonActionPayload } from '../../lib/models/maison-action-payload';
+import { MaisonDevice } from '../../lib/models/maison-device';
+import { maison_actions, MaisonAction } from '../../lib/models/maison-actions';
 
 // TODO: make these configurable
 const z2m_topic_prefix = 'zigbee2mqtt';
@@ -14,23 +16,6 @@ const ikea_remote_name = 'symfonisk_remote';
 
 const maison_topic_prefix = 'ezd';
 const maison_action_topic = `${maison_topic_prefix}/etc`;
-
-const ikea_remote_actions = [
-  'toggle',
-  'volume_up',
-  'volume_down',
-  'track_next',
-  'track_previous',
-  'dots_1_initial_press',
-  'dots_1_short_release',
-  'dots_1_long_press',
-  'dots_1_long_release',
-  'dots_1_double_press',
-  'dots_2_initial_press',
-  'dots_2_long_press',
-  'dots_2_long_release',
-  'dots_2_double_press',
-];
 
 /* TODO: load these from a config or DB */
 const maison_devices: MaisonDevice[] = [
@@ -46,16 +31,6 @@ type MqttCtx = {
   client: mqtt.MqttClient;
   logger: EzdLogger;
   msgRouter: MsgRouter;
-} & {};
-
-type MaisonDevice = {
-  /*
-    Currently I'll target just the binary state features of devices,
-      which are available on switches and lights.
-    I want to extend this to include device-specific features,
-      e.g. brightness, color for lights
-  */
-  name: string; // friendly name
 } & {};
 
 /*
@@ -96,7 +71,12 @@ async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   let actionPayload: MaisonActionPayload;
   let binStatePromises: Promise<string>[];
   let pubPromises: Promise<void>[];
-  actionPayload = MaisonActionPayload.parse(evt.payload);
+  try {
+    actionPayload = MaisonActionPayload.parse(evt.payload);
+  } catch(e) {
+    ctx.logger.error(e);
+    return;
+  }
   ctx.logger.info({
     topic: evt.topic,
     payload: actionPayload,
@@ -139,6 +119,26 @@ async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
       pubPromises.push(actPromise);
     }
     await Promise.all(pubPromises);
+  } else if(actionPayload.action === 'down') {
+    pubPromises = [];
+    for(let i = 0; i < maison_devices.length; i++) {
+      let pubPromise: Promise<void>;
+      let device = maison_devices[i];
+      pubPromise = setBinaryState(ctx, device.name, 'OFF');
+      pubPromises.push(pubPromise);
+    }
+    await Promise.all(pubPromises);
+  } else if(actionPayload.action === 'up') {
+    pubPromises = [];
+    for(let i = 0; i < maison_devices.length; i++) {
+      let pubPromise: Promise<void>;
+      let device = maison_devices[i];
+      pubPromise = setBinaryState(ctx, device.name, 'ON');
+      pubPromises.push(pubPromise);
+    }
+    await Promise.all(pubPromises);
+  } else {
+    ctx.logger.info(`unhandled action ${evt.topic}: '${actionPayload.action}'`);
   }
   ctx.logger.info({
     devices: maison_devices.map(device => device.name)
@@ -178,16 +178,9 @@ async function setBinaryState(ctx: MqttCtx, deviceName: string, stateStr: string
 }
 
 async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
-  const action_map = new Map(Object.entries({
-    toggle: 'main',
-    volume_up: 'up',
-    volume_down: 'down',
-    track_next: 'next',
-    track_previous: 'prev',
-  }));
   let payloadStr = evt.payload.toString();
-  let mappedAction: string | undefined;
-  mappedAction = action_map.get(payloadStr);
+  let mappedAction: MaisonAction | undefined;
+  mappedAction = maison_actions.ikea_action_map.get(payloadStr);
   if(mappedAction === undefined) {
     ctx.logger.warn({
       topic: evt.topic,
@@ -234,7 +227,6 @@ async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string>
   };
   subOffCb = await ctx.msgRouter.sub(deviceTopic, subOpts, (evt) => {
     let payload: unknown;
-    // subOffCb();
     payload = mqttUtil.parsePayload(evt.payload);
     if(!prim.isObject(payload)) {
       return deferred.reject(

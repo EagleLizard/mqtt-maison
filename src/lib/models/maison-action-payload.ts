@@ -1,9 +1,11 @@
+
 import { mqttUtil } from '../service/mqtt-util';
 import { prim } from '../util/validate-primitives';
+import { maison_actions, MaisonAction } from './maison-actions';
 
 export class MaisonActionPayload {
-  action: string;
-  constructor(action: string) {
+  action: MaisonAction;
+  constructor(action: MaisonAction) {
     this.action = action;
   }
   static parse(rawVal: Buffer | unknown): MaisonActionPayload {
@@ -15,6 +17,9 @@ export class MaisonActionPayload {
     }
     if(!prim.isString(rawVal.action)) {
       throw new Error('Expected .action to be a string');
+    }
+    if(!maison_actions.checkAction(rawVal.action)) {
+      throw new Error(`Invalid action: ${rawVal.action}`);
     }
     return new MaisonActionPayload(rawVal.action);
   }
