@@ -2,36 +2,12 @@
 import mqtt from 'mqtt';
 import { ezdConfig } from '../../config';
 import { logger } from '../../lib/logger/logger';
-import { EzdLogger } from '../../lib/logger/ezd-logger';
-import { MqttMsgEvt, MsgRouter, OffCb, SubOpts } from './msg-router';
-import { prim } from '../../lib/util/validate-primitives';
-import { mqttUtil } from '../../lib/service/mqtt-util';
+import { MqttMsgEvt, MsgRouter } from './msg-router';
 import { MaisonActionPayload } from '../../lib/models/maison-action-payload';
-import { MaisonDevice } from '../../lib/models/maison-device';
 import { maison_actions, MaisonAction } from '../../lib/models/maison-actions';
-
-// TODO: make these configurable
-const z2m_topic_prefix = 'zigbee2mqtt';
-const ikea_remote_name = 'symfonisk_remote';
-
-const maison_topic_prefix = 'ezd';
-const maison_action_topic = `${maison_topic_prefix}/etc`;
-
-/* TODO: load these from a config or DB */
-const maison_devices: MaisonDevice[] = [
-  {
-    name: 'croc',
-  },
-  {
-    name: 'rabbit',
-  },
-];
-
-type MqttCtx = {
-  client: mqtt.MqttClient;
-  logger: EzdLogger;
-  msgRouter: MsgRouter;
-} & {};
+import { MqttCtx } from '../../lib/models/mqtt-ctx';
+import { modeMain } from './remote-modes/mode-main';
+import { maisonConfig } from '../../lib/config/maison-config';
 
 /*
   To accomplish the desired behavior, the problem is separate into 2 steps:
@@ -49,7 +25,7 @@ export async function mqttEzdMain() {
   let msgRouter: MsgRouter;
   let ctx: MqttCtx;
   console.log('mqtt-ezd main ~');
-  actionsTopic = `${z2m_topic_prefix}/${ikea_remote_name}/action`;
+  actionsTopic = `${maisonConfig.z2m_topic_prefix}/${maisonConfig.ikea_remote_name}/action`;
   client = await initClient();
   msgRouter = await MsgRouter.init(client, logger);
   ctx = {
@@ -60,7 +36,7 @@ export async function mqttEzdMain() {
   let ikeaActionsOffCb = await msgRouter.sub(actionsTopic, (evt) => {
     ikeaMsgHandler(ctx, evt);
   });
-  let maisonActionsOffCb = await msgRouter.sub(maison_action_topic, (evt) => {
+  let maisonActionsOffCb = await msgRouter.sub(maisonConfig.maison_action_topic, (evt) => {
     maisonMsgHandler(ctx, evt);
   });
   msgRouter.listen();
@@ -69,8 +45,6 @@ export async function mqttEzdMain() {
 
 async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   let actionPayload: MaisonActionPayload;
-  let binStatePromises: Promise<string>[];
-  let pubPromises: Promise<void>[];
   try {
     actionPayload = MaisonActionPayload.parse(evt.payload);
   } catch(e) {
@@ -82,99 +56,17 @@ async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
     payload: actionPayload,
   });
   if(actionPayload.action === 'main') {
-    let binStates: string[];
-    binStatePromises = [];
-    pubPromises = [];
-    for(let i = 0; i < maison_devices.length; i++) {
-      let binStatePromise: Promise<string>;
-      let device = maison_devices[i];
-      binStatePromise = getBinaryState(ctx, device.name);
-      binStatePromises.push(binStatePromise);
-    }
-    binStates = await Promise.all(binStatePromises);
-    let synced: boolean;
-    synced = binStates.slice(1).every(binState => {
-      return binState === binStates[0];
-    });
-    if(!synced) {
-      ctx.logger.warn('Devices out of sync');
-    }
-    for(let i = 0; i < maison_devices.length; i++) {
-      let actPromise: Promise<void>;
-      let targetState: string;
-      let device = maison_devices[i];
-      let currState = binStates[i];
-      if(currState === 'ON') {
-        targetState = 'OFF';
-      } else if(currState === 'OFF') {
-        targetState = 'ON';
-      } else {
-        ctx.logger.error({
-          deviceName: device.name,
-          currState: currState,
-        }, 'unrecognized state');
-        throw new Error(`Unrecognized state ${currState} for device ${device.name}`);
-      }
-      actPromise = setBinaryState(ctx, device.name, targetState);
-      pubPromises.push(actPromise);
-    }
-    await Promise.all(pubPromises);
+    await modeMain.main(ctx);
   } else if(actionPayload.action === 'down') {
-    pubPromises = [];
-    for(let i = 0; i < maison_devices.length; i++) {
-      let pubPromise: Promise<void>;
-      let device = maison_devices[i];
-      pubPromise = setBinaryState(ctx, device.name, 'OFF');
-      pubPromises.push(pubPromise);
-    }
-    await Promise.all(pubPromises);
+    await modeMain.down(ctx);
   } else if(actionPayload.action === 'up') {
-    pubPromises = [];
-    for(let i = 0; i < maison_devices.length; i++) {
-      let pubPromise: Promise<void>;
-      let device = maison_devices[i];
-      pubPromise = setBinaryState(ctx, device.name, 'ON');
-      pubPromises.push(pubPromise);
-    }
-    await Promise.all(pubPromises);
+    await modeMain.up(ctx);
   } else {
     ctx.logger.info(`unhandled action ${evt.topic}: '${actionPayload.action}'`);
   }
   ctx.logger.info({
-    devices: maison_devices.map(device => device.name)
+    devices: maisonConfig.maison_devices.map(device => device.name)
   });
-}
-
-async function setBinaryState(ctx: MqttCtx, deviceName: string, stateStr: string): Promise<void> {
-  if(stateStr !== 'ON' && stateStr !== 'OFF') {
-    throw new Error(`Invalid state string '${stateStr}'`);
-  }
-  let z2mPubTopic = `${z2m_topic_prefix}/${deviceName}/set`;
-  let z2mSubTopic = `${z2m_topic_prefix}/${deviceName}`;
-  let pubMsg = stateStr;
-  let pubPromise: Promise<void>;
-  let subDeferred: PromiseWithResolvers<void>;
-  subDeferred = Promise.withResolvers();
-  let offCb = await ctx.msgRouter.sub(z2mSubTopic, (evt) => {
-    /* wait for device to broadcast desired state _*/
-    let payload = mqttUtil.parsePayload(evt.payload);
-    if(prim.isObject(payload) && payload.state === pubMsg) {
-      /*
-      TODO: strictly validate payload shape
-      _*/
-      offCb();
-      subDeferred.resolve();
-    }
-  });
-  pubPromise = new Promise((resolve) => {
-    ctx.client.publish(z2mPubTopic, pubMsg, (err) => {
-      if(err) {
-        ctx.logger.error(err);
-      }
-      resolve();
-    });
-  });
-  await Promise.all([ pubPromise, subDeferred.promise ]);
 }
 
 async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
@@ -196,12 +88,14 @@ async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   pubOpts = {
     qos: 0,
   };
+  let pubTopic: string;
+  pubTopic = maisonConfig.maison_action_topic;
   ctx.logger.info({
-    topic: maison_action_topic,
+    topic: pubTopic,
     payload: maisonActionPayload,
   }, 'publish');
   pubPromise = new Promise((resolve) => {
-    ctx.client.publish(maison_action_topic, maisonActionPayloadStr, pubOpts, (err) => {
+    ctx.client.publish(pubTopic, maisonActionPayloadStr, pubOpts, (err) => {
       if(err) {
         ctx.logger.error(err);
       }
@@ -209,49 +103,6 @@ async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
     });
   });
   await pubPromise;
-}
-
-/*
-effectively a .once() handler
-_*/
-async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string> {
-  let deviceTopic: string;
-  let subOffCb: OffCb;
-  let deferred: PromiseWithResolvers<string>;
-  let subOpts: SubOpts;
-  let pubOpts: mqtt.IClientPublishOptions;
-  deferred = Promise.withResolvers();
-  deviceTopic = `${z2m_topic_prefix}/${deviceName}`;
-  subOpts = {
-    qos: 0,
-  };
-  subOffCb = await ctx.msgRouter.sub(deviceTopic, subOpts, (evt) => {
-    let payload: unknown;
-    payload = mqttUtil.parsePayload(evt.payload);
-    if(!prim.isObject(payload)) {
-      return deferred.reject(
-        new Error('Expected payload to be an object')
-      );
-    }
-    if(!prim.isString(payload.state)) {
-      return deferred.reject(
-        new Error('Expected payload.state to be a string')
-      );
-    }
-    deferred.resolve(payload.state);
-  });
-  pubOpts = {
-    qos: 0,
-  };
-  let pubMsg = JSON.stringify({ state: '' });
-  ctx.client.publish(`${deviceTopic}/get`, pubMsg, pubOpts, (err) => {
-    if(err) {
-      return deferred.reject(err);
-    }
-  });
-  let deviceState = await deferred.promise;
-  subOffCb();
-  return deviceState;
 }
 
 function initClient(): Promise<mqtt.MqttClient> {
