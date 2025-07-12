@@ -5,6 +5,27 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [07/12/2025]
+
+### Typescript MQTT Client
+
+I have a couple of directions I want to go with this right now:
+
+1. Handle incoming messages one at a time (queue)
+2. Implement modal interface with next/prev
+
+I am leaning toward 2 right now. Implementing the modal interface would make it more immediately useful, and it would have parity with the previous workflow in Node-RED.
+
+Doing 1 is more interesting, but there are reasons not to do it right this second. Primarily, the code is still pretty tightly coupled and I like the flexibility I have right now to change implementations. I've rewritten the subscription adapters and publishing several times without much friction.
+
+1 is a much better candidate once the interfaces are more mature. This way, I'll avoid locking myself into the current design.
+
+### Golang MQTT Client
+
+The ergonomic benefits of the golang library I was using are not as comprehensive as I thought - subscribing to a single topic with a single handler is nice, but it doesn't handle unsubscriptions gracefully in scenarios where multiple subscriptions and unsubscriptions can happen in different parts of the program simultaneously.
+
+Something similar to track what events are registered to which topics, similar to that I did in the typescript client, would be needed for it to behave like I want.
+
 ## [07/08/2025]
 
 I've implemented some basic toggling functionality for devices with binary state in Typescript.
