@@ -1,6 +1,7 @@
 import mqtt from 'mqtt';
 import { EventRegistry } from '../../lib/events/event-registry';
 import { logger } from '../../lib/logger/logger';
+import { EzdLogger } from '../../lib/logger/ezd-logger';
 
 /*
 handle topic subscriptions and forward them to the handlers
@@ -9,6 +10,7 @@ Could also manage automatically unsubscribing from topics,
   because if no one has handlers registered to listen to a topic,
   we don't need to subscribe to it anymore
 _*/
+export type SubOpts = Partial<mqtt.IClientSubscribeOptions> & {};
 export type MqttMsgEvt = {
   topic: string;
   payload: Buffer;
@@ -19,18 +21,43 @@ export class MsgRouter {
   client: mqtt.MqttClient;
   /* map of topics -> registered events */
   topicEventMap: Map<string, EventRegistry<MqttMsgEvt>>;
-  private constructor(client: mqtt.MqttClient) {
+  logger: EzdLogger;
+  private constructor(client: mqtt.MqttClient, logger: EzdLogger) {
     this.client = client;
     this.topicEventMap = new Map();
+    this.logger = logger;
   }
 
   /*
     subscribe to a topic and add the callback to the list of handlers
     returns an off callback
+    for a source on overloading see: https://stackoverflow.com/a/61367418/4677252
   _*/
-  sub(topic: string, onMsgCb: (evt: MqttMsgEvt) => void): Promise<OffCb> {
+  sub(topic: string, onMsgCb: (evt: MqttMsgEvt) => void): Promise<OffCb>
+  sub(
+    topic: string,
+    opts: SubOpts,
+    onMsgCb: (evt: MqttMsgEvt) => void,
+  ): Promise<OffCb>
+  sub(
+    topic: string,
+    opts: SubOpts & {} | ((evt: MqttMsgEvt) => void),
+    onMsgCb?: (evt: MqttMsgEvt) => void,
+  ): Promise<OffCb> {
     let topicEvtReg: EventRegistry<MqttMsgEvt> | undefined;
     let subPromise: Promise<OffCb>;
+    let subOpts: SubOpts;
+    subOpts = {}; // default
+    if(typeof opts === 'function' && opts !== undefined) {
+      onMsgCb = opts;
+    }
+    if(typeof opts !== 'function' && opts !== undefined) {
+      subOpts = opts;
+    }
+    if(onMsgCb === undefined) {
+      /* this should be unreachable */
+      throw new Error('Invalid, no onMsgCb passed');
+    }
     topicEvtReg = this.topicEventMap.get(topic);
     if(topicEvtReg === undefined) {
       topicEvtReg = new EventRegistry();
@@ -41,11 +68,6 @@ export class MsgRouter {
         already subscribed to, so we will subscribe every time
     _*/
     subPromise = new Promise((resolve, reject) => {
-      let subOpts: mqtt.IClientSubscribeOptions;
-      subOpts = {
-        /* TODO: make configurable */
-        qos: 0,
-      };
       this.client.subscribe(topic, subOpts, (err) => {
         let offCb: OffCb;
         if(err) {
@@ -75,24 +97,26 @@ export class MsgRouter {
     let evtReg: EventRegistry<MqttMsgEvt> | undefined;
     evtReg = this.topicEventMap.get(topic);
     if(evtReg === undefined) {
-      throw new Error(`No handlers for message received on topic: ${topic}`);
+      this.logger.warn((`No handlers for message received on topic: ${topic}`));
     }
-    /*
-    TODO: unsubscribe the client if no handlers registered for it
-    _*/
     evt = {
       topic,
       payload,
       packet,
     };
-    if(evtReg.eventCount() < 1) {
-      logger.info({
+    if(evtReg !== undefined && evtReg.eventFnCount() < 1) {
+      /*
+      TODO: noisy because some devices always broadcast immediately
+        before the client processes the unsubscribe. Could fix by tracking
+        when the last function was unsubscribed, and only logging this if a
+        message is received on that topic after some cooldown period.
+      _*/
+      logger.warn({
         topic,
-        payload: payload.toString(),
-      });
+      }, 'message with no handler');
     }
-    evtReg.fire(evt);
     this.unsubIfNoHandlers(topic);
+    evtReg?.fire(evt);
   };
 
   private unsubIfNoHandlers(topic: string) {
@@ -102,7 +126,7 @@ export class MsgRouter {
     let evtReg: EventRegistry<MqttMsgEvt> | undefined;
     let evtCount: number;
     evtReg = this.topicEventMap.get(topic);
-    evtCount = evtReg?.eventCount() ?? 0;
+    evtCount = evtReg?.eventFnCount() ?? 0;
     if(evtCount > 0) {
       return;
     }
@@ -113,16 +137,15 @@ export class MsgRouter {
       }
       /* clean up registry */
       this.topicEventMap.delete(topic);
-      console.log(`unsubbed topic: ${topic}`);
     });
   }
 
   /*
   TODO: overload to take the same params as mqtt.Client.connect
   _*/
-  static init(client: mqtt.MqttClient): Promise<MsgRouter> {
+  static init(client: mqtt.MqttClient, logger: EzdLogger): Promise<MsgRouter> {
     let msgRouter: MsgRouter;
-    msgRouter = new MsgRouter(client);
+    msgRouter = new MsgRouter(client, logger);
     return Promise.resolve(msgRouter);
   }
 }

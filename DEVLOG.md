@@ -5,6 +5,44 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [07/12/2025]
+
+### Typescript MQTT Client
+
+I have a couple of directions I want to go with this right now:
+
+1. Handle incoming messages one at a time (queue)
+2. Implement modal interface with next/prev
+
+I am leaning toward 2 right now. Implementing the modal interface would make it more immediately useful, and it would have parity with the previous workflow in Node-RED.
+
+Doing 1 is more interesting, but there are reasons not to do it right this second. Primarily, the code is still pretty tightly coupled and I like the flexibility I have right now to change implementations. I've rewritten the subscription adapters and publishing several times without much friction.
+
+1 is a much better candidate once the interfaces are more mature. This way, I'll avoid locking myself into the current design.
+
+### Golang MQTT Client
+
+The ergonomic benefits of the golang library I was using are not as comprehensive as I thought - subscribing to a single topic with a single handler is nice, but it doesn't handle unsubscriptions gracefully in scenarios where multiple subscriptions and unsubscriptions can happen in different parts of the program simultaneously.
+
+Something similar to track what events are registered to which topics, similar to that I did in the typescript client, would be needed for it to behave like I want.
+
+## [07/08/2025]
+
+I've implemented some basic toggling functionality for devices with binary state in Typescript.
+
+Currently, many messages can be fired in quick succession and send multiple simultaneous `TOGGLE` messages. I am testing with multiple devices, and I can get the devices out of sync by starting with them all in the same state and pressing the toggle button rapidly.
+
+This is to be expected because:
+
+1. By default MQTT messages are fire-and-forget; there's no handshake that verifies the message was received.
+    1. I'm wondering if this is something that I can fix by setting the `qos` value to `1` or `2` (default is `0`), or some other mechanism built into the MQTT protocol or broker
+2. The script doesn't track the current state of a device, nor does it sync device state when multiple devices are being toggled.
+3. The script doesn't track if any actions are in-flight or not before sending the next message.
+    1. This could be solved by doing something like a `debounce` to prevent messages from sending before a previous action completes. I could track if an action is in-flight with a mutex-like struct.
+    2. A queue could work if I can track when an action has successfully finished (e.g. messages delivered / devices reached desired state). This would theoretically prevent the case where multiple devices become out of sync.
+
+Note: I plan on solving this at an application-level first, but this would need to be implemented with a shared DB or similar if I ever have multiple instances running.
+
 ## [07/07/2025]
 
 I've written the same basic functionality in JS (TS) and Golang. The abstractions are not 1:1, but they could be. Currently I like the control and ergonomics I have in JS.
