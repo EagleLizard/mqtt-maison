@@ -95,7 +95,7 @@ async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
     payload: maisonActionPayload,
   }, 'publish');
   pubPromise = new Promise((resolve) => {
-    ctx.client.publish(pubTopic, maisonActionPayloadStr, pubOpts, (err) => {
+    ctx.msgRouter.publish(pubTopic, maisonActionPayloadStr, pubOpts, (err) => {
       if(err) {
         ctx.logger.error(err);
       }

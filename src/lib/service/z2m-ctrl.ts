@@ -33,7 +33,7 @@ async function setBinaryState(ctx: MqttCtx, deviceName: string, stateStr: string
     }
   });
   pubPromise = new Promise((resolve) => {
-    ctx.client.publish(z2mPubTopic, pubMsg, (err) => {
+    ctx.msgRouter.publish(z2mPubTopic, pubMsg, (err) => {
       if(err) {
         ctx.logger.error(err);
       }
@@ -78,7 +78,7 @@ async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string>
     // qos: 0,
   };
   pubMsg = JSON.stringify({ state: '' });
-  ctx.client.publish(`${deviceTopic}/get`, pubMsg, pubOpts, (err) => {
+  ctx.msgRouter.publish(`${deviceTopic}/get`, pubMsg, pubOpts, (err) => {
     if(err) {
       return deferred.reject(err);
     }

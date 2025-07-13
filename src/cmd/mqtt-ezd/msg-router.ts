@@ -11,6 +11,7 @@ Could also manage automatically unsubscribing from topics,
   we don't need to subscribe to it anymore
 _*/
 export type SubOpts = Partial<mqtt.IClientSubscribeOptions> & {};
+export type PubOpts = mqtt.IClientPublishOptions & {};
 export type MqttMsgEvt = {
   topic: string;
   payload: Buffer;
@@ -79,6 +80,35 @@ export class MsgRouter {
     });
     return subPromise;
   }
+  /* publish to a topic */
+  publish(topic: string, message: string | Buffer): void
+  publish(topic: string, message: string | Buffer, callback?: mqtt.PacketCallback): void
+  publish(topic: string, message: string | Buffer, opts?: PubOpts): void
+  publish(
+    topic: string,
+    message: string | Buffer,
+    opts?: PubOpts,
+    callback?: mqtt.PacketCallback
+  ): void
+  publish(
+    topic: string,
+    message: string | Buffer,
+    opts?: mqtt.PacketCallback | PubOpts,
+    callback?: mqtt.PacketCallback,
+  ) {
+    let pubOpts: PubOpts;
+    pubOpts = {}; // default
+    if(typeof opts === 'function' && opts !== undefined) {
+      callback = opts;
+    }
+    if(typeof opts !== 'function' && opts !== undefined) {
+      pubOpts = opts;
+    }
+    this.client.publish(topic, message, pubOpts, (...args) => {;
+      return callback?.(...args);
+    });
+  }
+
   /* returns function to unlisted */
   listen(): OffCb {
     let listenerCount: number;
