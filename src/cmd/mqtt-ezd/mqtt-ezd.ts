@@ -8,6 +8,10 @@ import { maison_actions, MaisonAction } from '../../lib/models/maison-actions';
 import { MqttCtx } from '../../lib/models/mqtt-ctx';
 import { modeMain } from './remote-modes/mode-main';
 import { maisonConfig } from '../../lib/config/maison-config';
+import { RemoteMode, RemoteSubMode } from '../../lib/models/remote-mode';
+import { ModeCtrl } from '../../lib/service/mode-ctrl';
+import { modeS1 } from './remote-modes/mode-s1';
+import { modeS2 } from './remote-modes/mode-s2';
 
 /*
   To accomplish the desired behavior, the problem is separate into 2 steps:
@@ -23,15 +27,24 @@ export async function mqttEzdMain() {
   let client: mqtt.MqttClient;
   let actionsTopic: string;
   let msgRouter: MsgRouter;
+  let modeCtrl: ModeCtrl;
   let ctx: MqttCtx;
   console.log('mqtt-ezd main ~');
   actionsTopic = `${maisonConfig.z2m_topic_prefix}/${maisonConfig.ikea_remote_name}/action`;
   client = await initClient();
   msgRouter = await MsgRouter.init(client, logger);
+  modeCtrl = ModeCtrl.init({
+    defaultMode: modeMain,
+    subModes: [
+      modeS1,
+      modeS2,
+    ],
+  });
   ctx = {
     client,
     logger,
     msgRouter,
+    modeCtrl,
   };
   let ikeaActionsOffCb = await msgRouter.sub(actionsTopic, (evt) => {
     ikeaMsgHandler(ctx, evt);
@@ -45,6 +58,8 @@ export async function mqttEzdMain() {
 
 async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   let actionPayload: MaisonActionPayload;
+  let defaultMode: RemoteMode;
+  let currMode: RemoteSubMode;
   try {
     actionPayload = MaisonActionPayload.parse(evt.payload);
   } catch(e) {
@@ -55,12 +70,20 @@ async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
     topic: evt.topic,
     payload: actionPayload,
   });
+  defaultMode = ctx.modeCtrl.defaultMode();
+  currMode = ctx.modeCtrl.currMode();
   if(actionPayload.action === 'main') {
     await modeMain.main(ctx);
-  } else if(actionPayload.action === 'down') {
-    await modeMain.down(ctx);
   } else if(actionPayload.action === 'up') {
-    await modeMain.up(ctx);
+    await defaultMode.up(ctx);
+  } else if(actionPayload.action === 'down') {
+    await defaultMode.down(ctx);
+  } else if(actionPayload.action === 'next') {
+    ctx.modeCtrl.selectNext();
+    console.log(ctx.modeCtrl.currMode().modeName);
+  } else if(actionPayload.action === 'prev') {
+    ctx.modeCtrl.selectPrev();
+    console.log(ctx.modeCtrl.currMode().modeName);
   } else {
     ctx.logger.info(`unhandled action ${evt.topic}: '${actionPayload.action}'`);
   }
@@ -86,7 +109,7 @@ async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   let pubPromise: Promise<void>;
   let pubOpts: mqtt.IClientPublishOptions;
   pubOpts = {
-    qos: 0,
+    // qos: 0,
   };
   let pubTopic: string;
   pubTopic = maisonConfig.maison_action_topic;

@@ -48,12 +48,17 @@ export class MsgRouter {
     let topicEvtReg: EventRegistry<MqttMsgEvt> | undefined;
     let subPromise: Promise<OffCb>;
     let subOpts: SubOpts;
-    subOpts = {}; // default
+
+    /* default _*/
+    subOpts = {
+      qos: 1,
+    };
     if(typeof opts === 'function' && opts !== undefined) {
       onMsgCb = opts;
     }
     if(typeof opts !== 'function' && opts !== undefined) {
-      subOpts = opts;
+      /* shallow merge */
+      subOpts = Object.assign({}, subOpts, opts);
     }
     if(onMsgCb === undefined) {
       /* this should be unreachable */
@@ -97,12 +102,17 @@ export class MsgRouter {
     callback?: mqtt.PacketCallback,
   ) {
     let pubOpts: PubOpts;
-    pubOpts = {}; // default
+
+    /* default _*/
+    pubOpts = {
+      qos: 1,
+    };
     if(typeof opts === 'function' && opts !== undefined) {
       callback = opts;
     }
     if(typeof opts !== 'function' && opts !== undefined) {
-      pubOpts = opts;
+      /* shallow merge */
+      pubOpts = Object.assign({}, pubOpts, opts);
     }
     this.client.publish(topic, message, pubOpts, (...args) => {;
       return callback?.(...args);

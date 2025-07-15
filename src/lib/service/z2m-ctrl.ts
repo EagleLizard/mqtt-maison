@@ -54,7 +54,7 @@ async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string>
   deferred = Promise.withResolvers();
   deviceTopic = `${maisonConfig.z2m_topic_prefix}/${deviceName}`;
   subOpts = {
-    qos: 0,
+    // qos: 0,
   };
   subOffCb = await ctx.msgRouter.sub(deviceTopic, subOpts, (evt) => {
     let payload: unknown;
