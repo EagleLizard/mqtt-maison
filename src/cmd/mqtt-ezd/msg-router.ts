@@ -1,6 +1,5 @@
 import mqtt from 'mqtt';
 import { EventRegistry } from '../../lib/events/event-registry';
-import { logger } from '../../lib/logger/logger';
 import { EzdLogger } from '../../lib/logger/ezd-logger';
 
 /*
@@ -11,12 +10,14 @@ Could also manage automatically unsubscribing from topics,
   we don't need to subscribe to it anymore
 _*/
 export type SubOpts = Partial<mqtt.IClientSubscribeOptions> & {};
+export type PubOpts = mqtt.IClientPublishOptions & {};
 export type MqttMsgEvt = {
   topic: string;
   payload: Buffer;
   packet: mqtt.IPublishPacket;
 };
 export type OffCb = () => void;
+
 export class MsgRouter {
   client: mqtt.MqttClient;
   /* map of topics -> registered events */
@@ -39,7 +40,7 @@ export class MsgRouter {
     opts: SubOpts,
     onMsgCb: (evt: MqttMsgEvt) => void,
   ): Promise<OffCb>
-  sub(
+  async sub(
     topic: string,
     opts: SubOpts & {} | ((evt: MqttMsgEvt) => void),
     onMsgCb?: (evt: MqttMsgEvt) => void,
@@ -47,12 +48,17 @@ export class MsgRouter {
     let topicEvtReg: EventRegistry<MqttMsgEvt> | undefined;
     let subPromise: Promise<OffCb>;
     let subOpts: SubOpts;
-    subOpts = {}; // default
+
+    /* default _*/
+    subOpts = {
+      qos: 1,
+    };
     if(typeof opts === 'function' && opts !== undefined) {
       onMsgCb = opts;
     }
     if(typeof opts !== 'function' && opts !== undefined) {
-      subOpts = opts;
+      /* shallow merge */
+      subOpts = Object.assign({}, subOpts, opts);
     }
     if(onMsgCb === undefined) {
       /* this should be unreachable */
@@ -77,8 +83,43 @@ export class MsgRouter {
         resolve(offCb);
       });
     });
-    return subPromise;
+    let offCb = await subPromise;
+    return offCb;
   }
+  /* publish to a topic */
+  publish(topic: string, message: string | Buffer): void
+  publish(topic: string, message: string | Buffer, callback?: mqtt.PacketCallback): void
+  publish(topic: string, message: string | Buffer, opts?: PubOpts): void
+  publish(
+    topic: string,
+    message: string | Buffer,
+    opts?: PubOpts,
+    callback?: mqtt.PacketCallback
+  ): void
+  publish(
+    topic: string,
+    message: string | Buffer,
+    opts?: mqtt.PacketCallback | PubOpts,
+    callback?: mqtt.PacketCallback,
+  ) {
+    let pubOpts: PubOpts;
+
+    /* default _*/
+    pubOpts = {
+      qos: 1,
+    };
+    if(typeof opts === 'function' && opts !== undefined) {
+      callback = opts;
+    }
+    if(typeof opts !== 'function' && opts !== undefined) {
+      /* shallow merge */
+      pubOpts = Object.assign({}, pubOpts, opts);
+    }
+    this.client.publish(topic, message, pubOpts, (err, packet) => {;
+      return callback?.(err, packet);
+    });
+  }
+
   /* returns function to unlisted */
   listen(): OffCb {
     let listenerCount: number;
@@ -86,7 +127,9 @@ export class MsgRouter {
     if(listenerCount < 1) {
       this.client.on('message', this.handleMessage);
     }
-    return this.unlisten;
+    return () => {
+      this.unlisten();
+    };
   }
   unlisten(): void {
     this.client.off('message', this.handleMessage);
@@ -111,12 +154,12 @@ export class MsgRouter {
         when the last function was unsubscribed, and only logging this if a
         message is received on that topic after some cooldown period.
       _*/
-      logger.warn({
+      this.logger.warn({
         topic,
       }, 'message with no handler');
     }
-    this.unsubIfNoHandlers(topic);
     evtReg?.fire(evt);
+    this.unsubIfNoHandlers(topic);
   };
 
   private unsubIfNoHandlers(topic: string) {
@@ -132,7 +175,7 @@ export class MsgRouter {
     }
     this.client.unsubscribe(topic, (err) => {
       if(err) {
-        logger.error(err);
+        this.logger.error(err);
         throw err;
       }
       /* clean up registry */

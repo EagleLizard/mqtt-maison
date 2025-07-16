@@ -5,7 +5,43 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [07/16/2025]
+
+I am thinking that the action modes might benefit from having a different interface.
+
+It may also be more important than I thought before to process remote control actions in a queue. During testing there are some synchronicity problems that make me think that there are several async message handlers hanging on a single promise. For example, several toggles may be processed for a single device but not the other. Then, several seconds later, the other devices toggles on / off several times in quick succession.
+
+## [07/15/2025]
+
+### Modal Control feature notes
+
+Potential improvements:
+
+1. Perform some action when switching modes
+    1. Optional, async. `.onSelect()` or similar.
+    2. Use-case: single-device LED light controls could "blink" on select
+2. Reset to default mode after some period of inactivity
+    1. If no message received on the custom topic (i.e. from the ikea remote adapter) for some time (e.g. 30s), reset mode to default
+
+## [07/13/2025]
+
+### Update 1 - follow up
+
+To follow up on the update from yesterday, I do want to make the client work with the same ergonomics I have in the typescript implementation. Primarily:
+
+1. When a topic is subscribed to: keep track of the handler (callback) in a central registry
+2. When a tracked handler is de-registered: remove it from the list of tracked handlers
+    1. If there are no more handlers registered for the topics, unsubscribe from the topic in the underlying golang paho.mqtt client
+
+I will hold off on implementing this in the golang client for now in order to prioritize current work in the typescript client as it is farther along at this point.
+
+The motivation for switching to golang is the memory footprint - the target runtime has constrained memory and cpu requirements.
+
 ## [07/12/2025]
+
+### Update 1
+
+I'd like to spend some time on the golang implementation to get it closer to where the typescript implementation is currently.
 
 ### Typescript MQTT Client
 
