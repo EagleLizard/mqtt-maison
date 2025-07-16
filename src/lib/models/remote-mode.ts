@@ -17,12 +17,12 @@ export type RemoteMode = {
 
 // export type RemoteSubMode = Partial<Omit<RemoteMode, 'modeName'>> & Pick<RemoteMode, 'modeName'>;
 
-export type RemoteSubMode = {
-  modeName: RemoteMode['modeName'] & {};
-  main?: RemoteMode['main'] & {};
-  up?: RemoteMode['up'] & {};
-  down?: RemoteMode['down'] & {};
-} & {};
+// export type RemoteSubMode = {
+//   modeName: RemoteMode['modeName'] & {};
+//   main?: RemoteMode['main'] & {};
+//   up?: RemoteMode['up'] & {};
+//   down?: RemoteMode['down'] & {};
+// } & {};
 
 /*
 static assertions

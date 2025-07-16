@@ -8,10 +8,7 @@ import { maison_actions, MaisonAction } from '../../lib/models/maison-actions';
 import { MqttCtx } from '../../lib/models/mqtt-ctx';
 import { modeMain } from './remote-modes/mode-main';
 import { maisonConfig } from '../../lib/config/maison-config';
-import { RemoteMode, RemoteSubMode } from '../../lib/models/remote-mode';
-import { ModeCtrl } from '../../lib/service/mode-ctrl';
-import { modeS1 } from './remote-modes/mode-s1';
-import { modeS2 } from './remote-modes/mode-s2';
+import { RemoteMode } from '../../lib/models/remote-mode';
 
 /*
   To accomplish the desired behavior, the problem is separate into 2 steps:
@@ -28,25 +25,16 @@ export async function mqttEzdMain() {
   let ikeaTopic: string;
   let maisonTopic: string;
   let msgRouter: MsgRouter;
-  let modeCtrl: ModeCtrl;
   let ctx: MqttCtx;
   console.log('mqtt-ezd main ~');
   ikeaTopic = `${maisonConfig.z2m_topic_prefix}/${maisonConfig.ikea_remote_name}/action`;
   maisonTopic = maisonConfig.maison_action_topic;
   client = await initClient();
   msgRouter = await MsgRouter.init(client, logger);
-  modeCtrl = ModeCtrl.init({
-    defaultMode: modeMain,
-    subModes: [
-      modeS1,
-      modeS2,
-    ],
-  });
   ctx = {
     client,
     logger,
     msgRouter,
-    modeCtrl,
   };
   let ikeaOffCb = await msgRouter.sub(ikeaTopic, (evt) => {
     ikeaMsgHandler(ctx, evt);
@@ -61,7 +49,6 @@ export async function mqttEzdMain() {
 async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   let actionPayload: MaisonActionPayload;
   let defaultMode: RemoteMode;
-  let currMode: RemoteSubMode;
   try {
     actionPayload = MaisonActionPayload.parse(evt.payload);
   } catch(e) {
@@ -73,19 +60,12 @@ async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
     payload: actionPayload,
   });
   defaultMode = modeMain;
-  currMode = ctx.modeCtrl.currMode();
   if(actionPayload.action === 'main') {
     await defaultMode.main(ctx);
   } else if(actionPayload.action === 'up') {
     await defaultMode.up(ctx);
   } else if(actionPayload.action === 'down') {
     await defaultMode.down(ctx);
-  } else if(actionPayload.action === 'next') {
-    ctx.modeCtrl.selectNext();
-    console.log(ctx.modeCtrl.currMode().modeName);
-  } else if(actionPayload.action === 'prev') {
-    ctx.modeCtrl.selectPrev();
-    console.log(ctx.modeCtrl.currMode().modeName);
   } else {
     ctx.logger.info(`unhandled action ${evt.topic}: '${actionPayload.action}'`);
   }
