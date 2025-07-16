@@ -5,6 +5,24 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [07/16/2025]
+
+I am thinking that the action modes might benefit from having a different interface.
+
+It may also be more important than I thought before to process remote control actions in a queue. During testing there are some synchronicity problems that make me think that there are several async message handlers hanging on a single promise. For example, several toggles may be processed for a single device but not the other. Then, several seconds later, the other devices toggles on / off several times in quick succession.
+
+## [07/15/2025]
+
+### Modal Control feature notes
+
+Potential improvements:
+
+1. Perform some action when switching modes
+    1. Optional, async. `.onSelect()` or similar.
+    2. Use-case: single-device LED light controls could "blink" on select
+2. Reset to default mode after some period of inactivity
+    1. If no message received on the custom topic (i.e. from the ikea remote adapter) for some time (e.g. 30s), reset mode to default
+
 ## [07/13/2025]
 
 ### Update 1 - follow up

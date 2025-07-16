@@ -1,6 +1,5 @@
 import mqtt from 'mqtt';
 import { EventRegistry } from '../../lib/events/event-registry';
-import { logger } from '../../lib/logger/logger';
 import { EzdLogger } from '../../lib/logger/ezd-logger';
 
 /*
@@ -18,6 +17,7 @@ export type MqttMsgEvt = {
   packet: mqtt.IPublishPacket;
 };
 export type OffCb = () => void;
+
 export class MsgRouter {
   client: mqtt.MqttClient;
   /* map of topics -> registered events */
@@ -40,7 +40,7 @@ export class MsgRouter {
     opts: SubOpts,
     onMsgCb: (evt: MqttMsgEvt) => void,
   ): Promise<OffCb>
-  sub(
+  async sub(
     topic: string,
     opts: SubOpts & {} | ((evt: MqttMsgEvt) => void),
     onMsgCb?: (evt: MqttMsgEvt) => void,
@@ -83,7 +83,8 @@ export class MsgRouter {
         resolve(offCb);
       });
     });
-    return subPromise;
+    let offCb = await subPromise;
+    return offCb;
   }
   /* publish to a topic */
   publish(topic: string, message: string | Buffer): void
@@ -114,8 +115,8 @@ export class MsgRouter {
       /* shallow merge */
       pubOpts = Object.assign({}, pubOpts, opts);
     }
-    this.client.publish(topic, message, pubOpts, (...args) => {;
-      return callback?.(...args);
+    this.client.publish(topic, message, pubOpts, (err, packet) => {;
+      return callback?.(err, packet);
     });
   }
 
@@ -126,7 +127,9 @@ export class MsgRouter {
     if(listenerCount < 1) {
       this.client.on('message', this.handleMessage);
     }
-    return this.unlisten;
+    return () => {
+      this.unlisten();
+    };
   }
   unlisten(): void {
     this.client.off('message', this.handleMessage);
@@ -151,12 +154,12 @@ export class MsgRouter {
         when the last function was unsubscribed, and only logging this if a
         message is received on that topic after some cooldown period.
       _*/
-      logger.warn({
+      this.logger.warn({
         topic,
       }, 'message with no handler');
     }
-    this.unsubIfNoHandlers(topic);
     evtReg?.fire(evt);
+    this.unsubIfNoHandlers(topic);
   };
 
   private unsubIfNoHandlers(topic: string) {
@@ -172,7 +175,7 @@ export class MsgRouter {
     }
     this.client.unsubscribe(topic, (err) => {
       if(err) {
-        logger.error(err);
+        this.logger.error(err);
         throw err;
       }
       /* clean up registry */

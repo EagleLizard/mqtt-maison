@@ -40,7 +40,8 @@ async function setBinaryState(ctx: MqttCtx, deviceName: string, stateStr: string
       resolve();
     });
   });
-  await Promise.all([ pubPromise, subDeferred.promise ]);
+  await pubPromise;
+  await subDeferred.promise;
 }
 
 /*
@@ -54,10 +55,11 @@ async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string>
   deferred = Promise.withResolvers();
   deviceTopic = `${maisonConfig.z2m_topic_prefix}/${deviceName}`;
   subOpts = {
-    // qos: 0,
+    // qos: 2,
   };
   subOffCb = await ctx.msgRouter.sub(deviceTopic, subOpts, (evt) => {
     let payload: unknown;
+    subOffCb();
     payload = mqttUtil.parsePayload(evt.payload);
     if(!prim.isObject(payload)) {
       return deferred.reject(
@@ -72,18 +74,24 @@ async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string>
     deferred.resolve(payload.state);
   });
   let pubOpts: mqtt.IClientPublishOptions;
+  let pubTopic: string;
   let pubMsg: string;
+  let pubPromise: Promise<void>;
   let deviceState: string;
   pubOpts = {
     // qos: 0,
   };
+  pubTopic = `${deviceTopic}/get`;
   pubMsg = JSON.stringify({ state: '' });
-  ctx.msgRouter.publish(`${deviceTopic}/get`, pubMsg, pubOpts, (err) => {
-    if(err) {
-      return deferred.reject(err);
-    }
+  pubPromise = new Promise((resolve, reject) => {
+    ctx.msgRouter.publish(pubTopic, pubMsg, pubOpts, (err) => {
+      if(err) {
+        return reject(err);
+      }
+      resolve();
+    });
   });
+  await pubPromise;
   deviceState = await deferred.promise;
-  subOffCb();
   return deviceState;
 }
