@@ -5,10 +5,11 @@ _*/
 type EzdLogFn = {
   (obj: unknown, msg?: string): void;
   (msg: string): void;
-}
+};
 
 /* logger interface */
 export type EzdLogger = {
+  debug: EzdLogFn;
   info: EzdLogFn;
   warn: EzdLogFn;
   error: EzdLogFn;

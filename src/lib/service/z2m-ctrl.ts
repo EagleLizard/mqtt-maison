@@ -28,7 +28,6 @@ async function setBinaryState(ctx: MqttCtx, deviceName: string, stateStr: string
       /*
       TODO: strictly validate payload shape
       _*/
-      offCb();
       subDeferred.resolve();
     }
   });
@@ -40,8 +39,13 @@ async function setBinaryState(ctx: MqttCtx, deviceName: string, stateStr: string
       resolve();
     });
   });
-  await pubPromise;
-  await subDeferred.promise;
+  try {
+    await pubPromise;
+    await subDeferred.promise;
+  } finally {
+    /* always clean up subscriptions _*/
+    offCb();
+  }
 }
 
 /*
@@ -59,7 +63,6 @@ async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string>
   };
   subOffCb = await ctx.msgRouter.sub(deviceTopic, subOpts, (evt) => {
     let payload: unknown;
-    subOffCb();
     payload = mqttUtil.parsePayload(evt.payload);
     if(!prim.isObject(payload)) {
       return deferred.reject(
@@ -91,7 +94,12 @@ async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string>
       resolve();
     });
   });
-  await pubPromise;
-  deviceState = await deferred.promise;
+  try {
+    await pubPromise;
+    deviceState = await deferred.promise;
+  } finally {
+    /* always clean up subscriptions _*/
+    subOffCb();
+  }
   return deviceState;
 }

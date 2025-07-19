@@ -173,13 +173,17 @@ export class MsgRouter {
     if(evtCount > 0) {
       return;
     }
+    /*
+    clean up registry
+    NOTE: this shouldn't be done asynchronously otherwise it may delete
+      the topic EventRegistry after a new event has subscribed.
+    _*/
+    this.topicEventMap.delete(topic);
     this.client.unsubscribe(topic, (err) => {
       if(err) {
         this.logger.error(err);
         throw err;
       }
-      /* clean up registry */
-      this.topicEventMap.delete(topic);
     });
   }
 

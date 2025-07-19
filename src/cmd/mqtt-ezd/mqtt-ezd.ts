@@ -69,9 +69,9 @@ async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   } else {
     ctx.logger.info(`unhandled action ${evt.topic}: '${actionPayload.action}'`);
   }
-  ctx.logger.info({
+  ctx.logger.debug({
     devices: maisonConfig.maison_devices.map(device => device.name)
-  });
+  }, 'End maisonMsgHandler()');
 }
 
 async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
