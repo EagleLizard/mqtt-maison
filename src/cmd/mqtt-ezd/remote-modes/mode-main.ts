@@ -21,7 +21,7 @@ async function actionMain(ctx: MqttCtx) {
   binStatePromises = [];
   for(let i = 0; i < maisonConfig.maison_devices.length; i++) {
     let device = maisonConfig.maison_devices[i];
-    let binStatePromise = z2mCtrl.getBinaryState(ctx, device.name);
+    let binStatePromise = z2mCtrl.getBinaryState(ctx, device);
     binStatePromises.push(binStatePromise);
   }
   binStates = await Promise.all(binStatePromises);
@@ -50,7 +50,7 @@ async function actionMain(ctx: MqttCtx) {
       }, 'unrecognized state');
       throw new Error(`Unrecognized state ${currState} for device ${device.name}`);
     }
-    actPromise = z2mCtrl.setBinaryState(ctx, device.name, targetState);
+    actPromise = z2mCtrl.setBinaryState(ctx, device, targetState);
     actPromises.push(actPromise);
   }
   await Promise.all(actPromises);
@@ -62,7 +62,7 @@ async function actionUp(ctx: MqttCtx) {
   for(let i = 0; i < maisonConfig.maison_devices.length; i++) {
     let pubPromise: Promise<void>;
     let device = maisonConfig.maison_devices[i];
-    pubPromise = z2mCtrl.setBinaryState(ctx, device.name, 'ON');
+    pubPromise = z2mCtrl.setBinaryState(ctx, device, 'ON');
     pubPromises.push(pubPromise);
   }
   await Promise.all(pubPromises);
@@ -74,7 +74,7 @@ async function actionDown(ctx: MqttCtx) {
   for(let i = 0; i < maisonConfig.maison_devices.length; i++) {
     let pubPromise: Promise<void>;
     let device = maisonConfig.maison_devices[i];
-    pubPromise = z2mCtrl.setBinaryState(ctx, device.name, 'OFF');
+    pubPromise = z2mCtrl.setBinaryState(ctx, device, 'OFF');
     pubPromises.push(pubPromise);
   }
   await Promise.all(pubPromises);

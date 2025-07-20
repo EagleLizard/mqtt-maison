@@ -48,7 +48,6 @@ export async function mqttEzdMain() {
 
 async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   let actionPayload: MaisonActionPayload;
-  let defaultMode: RemoteMode;
   try {
     actionPayload = MaisonActionPayload.parse(evt.payload);
   } catch(e) {
@@ -59,19 +58,19 @@ async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
     topic: evt.topic,
     payload: actionPayload,
   });
-  defaultMode = modeMain;
   if(actionPayload.action === 'main') {
-    await defaultMode.main(ctx);
+    await modeMain.main(ctx);
   } else if(actionPayload.action === 'up') {
-    await defaultMode.up(ctx);
+    await modeMain.up(ctx);
   } else if(actionPayload.action === 'down') {
-    await defaultMode.down(ctx);
+    await modeMain.down(ctx);
   } else {
     ctx.logger.info(`unhandled action ${evt.topic}: '${actionPayload.action}'`);
   }
   ctx.logger.debug({
-    devices: maisonConfig.maison_devices.map(device => device.name)
-  }, 'End maisonMsgHandler()');
+    topic: evt.topic,
+    action: actionPayload
+  }, 'END maisonMsgHandler()');
 }
 
 async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
@@ -95,10 +94,6 @@ async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   };
   let pubTopic: string;
   pubTopic = maisonConfig.maison_action_topic;
-  ctx.logger.info({
-    topic: pubTopic,
-    payload: maisonActionPayload,
-  }, 'publish');
   pubPromise = new Promise((resolve) => {
     ctx.msgRouter.publish(pubTopic, maisonActionPayloadStr, pubOpts, (err) => {
       if(err) {

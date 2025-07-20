@@ -5,6 +5,10 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [07/20/2025]
+
+It may make more sense to use NodeJS's [native EventEmitter](https://nodejs.org/docs/latest/api/events.html#class-eventemitter) instead of my own EventRegistry class.
+
 ## [07/16/2025]
 
 I am thinking that the action modes might benefit from having a different interface.

@@ -5,26 +5,28 @@ import { MqttCtx } from '../models/mqtt-ctx';
 import { maisonConfig } from '../config/maison-config';
 import { mqttUtil } from './mqtt-util';
 import { prim } from '../util/validate-primitives';
+import { MaisonDevice } from '../models/maison-device';
 
 export const z2mCtrl = {
   getBinaryState: getBinaryState,
   setBinaryState: setBinaryState,
 } as const;
 
-async function setBinaryState(ctx: MqttCtx, deviceName: string, stateStr: string): Promise<void> {
+async function setBinaryState(ctx: MqttCtx, device: MaisonDevice, stateStr: string): Promise<void> {
   if(stateStr !== 'ON' && stateStr !== 'OFF') {
     throw new Error(`Invalid state string '${stateStr}'`);
   }
-  let z2mPubTopic = `${maisonConfig.z2m_topic_prefix}/${deviceName}/set`;
-  let z2mSubTopic = `${maisonConfig.z2m_topic_prefix}/${deviceName}`;
-  let pubMsg = stateStr;
+  let z2mSetTopic = `${maisonConfig.z2m_topic_prefix}/${device.name}/set`;
+  let z2mSubTopic = `${maisonConfig.z2m_topic_prefix}/${device.name}`;
+  let setPubMsg = stateStr;
   let pubPromise: Promise<void>;
   let subDeferred: PromiseWithResolvers<void>;
   subDeferred = Promise.withResolvers();
+
   let offCb = await ctx.msgRouter.sub(z2mSubTopic, (evt) => {
     /* wait for device to broadcast desired state _*/
     let payload = mqttUtil.parsePayload(evt.payload);
-    if(prim.isObject(payload) && payload.state === pubMsg) {
+    if(prim.isObject(payload) && payload.state === setPubMsg) {
       /*
       TODO: strictly validate payload shape
       _*/
@@ -32,7 +34,7 @@ async function setBinaryState(ctx: MqttCtx, deviceName: string, stateStr: string
     }
   });
   pubPromise = new Promise((resolve) => {
-    ctx.msgRouter.publish(z2mPubTopic, pubMsg, (err) => {
+    ctx.msgRouter.publish(z2mSetTopic, setPubMsg, (err) => {
       if(err) {
         ctx.logger.error(err);
       }
@@ -51,13 +53,13 @@ async function setBinaryState(ctx: MqttCtx, deviceName: string, stateStr: string
 /*
 effectively a .once() handler
 _*/
-async function getBinaryState(ctx: MqttCtx, deviceName: string): Promise<string> {
+async function getBinaryState(ctx: MqttCtx, device: MaisonDevice): Promise<string> {
   let deviceTopic: string;
   let subOffCb: OffCb;
   let deferred: PromiseWithResolvers<string>;
   let subOpts: SubOpts;
   deferred = Promise.withResolvers();
-  deviceTopic = `${maisonConfig.z2m_topic_prefix}/${deviceName}`;
+  deviceTopic = `${maisonConfig.z2m_topic_prefix}/${device.name}`;
   subOpts = {
     // qos: 2,
   };
