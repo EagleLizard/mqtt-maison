@@ -5,6 +5,22 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [07/22/2025]
+
+I think I've figured out a way to reliably timeout and unsub when the `z2m/device/get` message times out. It should also work if a device isn't broadcasting its state. It's a bit crude (polling with `setTimeout`), but seems to work in most cases.
+
+This has been a pain in the ass. As far as I can tell, the issue is with the zigbee2mqtt implementation rather than some misconfiguration of my network or MQTT broker. It may have something to do with the ember/ezsp firmware (based on logs I see containing `zh:ember:ezsp:`).
+
+I *think* `ember` is relatively new in the stack, and I don't recall having issues before its introduction.
+
+On the bright side, this handles a general case when using something like MQTT to interface with physical devices; there could always be instances where a device is not reachable.
+
+## [07/21/2025]
+
+I'm working around an error case in zigbee2mqtt where a `z2m/device/set` message is published successfully, but zigbee2mqtt fails to send the message to the actual device. This is the same issue as [this github issue for "Error: ZCL command genOnOff.on"](https://github.com/Koenkk/zigbee2mqtt/issues/24375).
+
+I think this is an issue with the actual zigbee2mqtt firmware, however I can't find clear solutions / explanations about this specific issue, so it's possible it's signal interference or a hardware problem with my main coordinator.
+
 ## [07/20/2025]
 
 It may make more sense to use NodeJS's [native EventEmitter](https://nodejs.org/docs/latest/api/events.html#class-eventemitter) instead of my own EventRegistry class.

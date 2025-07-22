@@ -9,6 +9,8 @@ import { MqttCtx } from '../../lib/models/mqtt-ctx';
 import { modeMain } from './remote-modes/mode-main';
 import { maisonConfig } from '../../lib/config/maison-config';
 import { RemoteMode } from '../../lib/models/remote-mode';
+import { EventQueue } from '../../lib/events/event-queue';
+import { mqttUtil } from '../../lib/service/mqtt-util';
 
 /*
   To accomplish the desired behavior, the problem is separate into 2 steps:
@@ -26,6 +28,7 @@ export async function mqttEzdMain() {
   let maisonTopic: string;
   let msgRouter: MsgRouter;
   let ctx: MqttCtx;
+  let maisonEvtQueue: EventQueue<MqttMsgEvt>;
   console.log('mqtt-ezd main ~');
   ikeaTopic = `${maisonConfig.z2m_topic_prefix}/${maisonConfig.ikea_remote_name}/action`;
   maisonTopic = maisonConfig.maison_action_topic;
@@ -39,9 +42,39 @@ export async function mqttEzdMain() {
   let ikeaOffCb = await msgRouter.sub(ikeaTopic, (evt) => {
     ikeaMsgHandler(ctx, evt);
   });
-  let maisonOffCb = await msgRouter.sub(maisonTopic, (evt) => {
-    maisonMsgHandler(ctx, evt);
+  let inProgressMaisonReqs = 0;
+  const inProgressMisonPollFn = () => {
+    ctx.logger.debug({
+      handler: 'maisonMsg',
+      inProgressReqs: inProgressMaisonReqs,
+    });
+    // console.log(ctx.msgRouter.topicEventMap); // check for hanging message handlers
+    setTimeout(inProgressMisonPollFn, 5e3);
+  };
+  inProgressMisonPollFn();
+  maisonEvtQueue = EventQueue.init((evt, doneCb) => {
+    inProgressMaisonReqs++;
+    maisonMsgHandler(ctx, evt).catch(err => {
+      doneCb(err);
+    }).finally(() => {
+      inProgressMaisonReqs--;
+      doneCb();
+    });
   });
+  let maisonOffCb = await msgRouter.sub(maisonTopic, (evt) => {
+    // maisonEvtQueue.push(evt);
+
+    inProgressMaisonReqs++;
+    maisonMsgHandler(ctx, evt).catch(err => {
+      ctx.logger.error(err);
+    }).finally(() => {
+      inProgressMaisonReqs--;
+    });
+  });
+  // let crocOffCb = await msgRouter.sub(`${maisonConfig.z2m_topic_prefix}/croc`, (evt) => {
+  //   let payload = mqttUtil.parsePayload(evt.payload);
+  //   ctx.logger.debug(`main():[croc] state: ${payload?.state}`);
+  // });
   msgRouter.listen();
   logger.info('mqtt-ezd start');
 }
@@ -58,12 +91,23 @@ async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
     topic: evt.topic,
     payload: actionPayload,
   });
+  if(actionPayload.dob !== undefined) {
+    console.log(`age: ${Date.now() - (new Date(actionPayload.dob)).valueOf()}ms`);
+  }
   if(actionPayload.action === 'main') {
     await modeMain.main(ctx);
   } else if(actionPayload.action === 'up') {
     await modeMain.up(ctx);
   } else if(actionPayload.action === 'down') {
     await modeMain.down(ctx);
+  } else if(actionPayload.action === 'dot') {
+    let getPubMsg = JSON.stringify({ state: '' });
+    ctx.msgRouter.publish(`${maisonConfig.z2m_topic_prefix}/croc/get`, getPubMsg, (err) => {
+      if(err) {
+        ctx.logger.error(err);
+      }
+      ctx.logger.debug('croc/get');
+    });
   } else {
     ctx.logger.info(`unhandled action ${evt.topic}: '${actionPayload.action}'`);
   }
@@ -85,8 +129,10 @@ async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   }
   let maisonActionPayload: MaisonActionPayload = {
     action: mappedAction,
+    dob: (new Date()).toISOString(),
   };
   let maisonActionPayloadStr = JSON.stringify(maisonActionPayload);
+  // console.log(maisonActionPayload);
   let pubPromise: Promise<void>;
   let pubOpts: mqtt.IClientPublishOptions;
   pubOpts = {
