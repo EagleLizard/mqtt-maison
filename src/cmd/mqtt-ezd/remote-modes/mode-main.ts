@@ -3,12 +3,11 @@
 
 import { maisonConfig } from '../../../lib/config/maison-config';
 import { MqttCtx } from '../../../lib/models/mqtt-ctx';
-import { RemoteMode } from '../../../lib/models/remote-mode';
 import { z2mCtrl } from '../../../lib/service/z2m-ctrl';
 
 const mode_main_name = 'mode_main';
 
-export const modeMain: RemoteMode = {
+export const modeMain = {
   modeName: mode_main_name,
   main: actionMain,
   up: actionUp,

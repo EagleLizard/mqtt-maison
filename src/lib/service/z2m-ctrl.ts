@@ -1,6 +1,5 @@
 
-import mqtt from 'mqtt';
-import { OffCb, SubOpts } from '../../cmd/mqtt-ezd/msg-router';
+import { MqttMsgEvt, OffCb } from '../../cmd/mqtt-ezd/msg-router';
 import { MqttCtx } from '../models/mqtt-ctx';
 import { maisonConfig } from '../config/maison-config';
 import { mqttUtil } from './mqtt-util';
@@ -65,7 +64,7 @@ async function setBinaryState(ctx: MqttCtx, device: MaisonDevice, stateStr: stri
       pollDeferred.reject(new Error(`Timeout of ${SET_BIN_STATE_TIMEOUT_MS}ms exceeded`));
       return;
     }
-    ctx.logger.debug(`[${device.name}${sendGetState ? '/get' : ''}] Poll - ${elapsedMs} ms`);
+    // ctx.logger.debug(`[${device.name}${sendGetState ? '/get' : ''}] Poll - ${elapsedMs} ms`);
     if(sendGetState && elapsedMs > pollGetPublishWaitMs) {
       pollPromise = new Promise((resolve) => {
         let z2mGetMsg = JSON.stringify({ state: '' });
@@ -104,7 +103,7 @@ async function setBinaryState(ctx: MqttCtx, device: MaisonDevice, stateStr: stri
       subFinished = true;
     }
   });
-  setPubPromise = new Promise((resolve) => {
+  setPubPromise = new Promise<void>((resolve) => {
     ctx.msgRouter.publish(z2mSetTopic, setPubMsg, (err) => {
       if(err) {
         ctx.logger.error(err);
@@ -126,58 +125,16 @@ async function setBinaryState(ctx: MqttCtx, device: MaisonDevice, stateStr: stri
   await resPromise;
 }
 
-/*
-effectively a .once() handler
-_*/
 async function getBinaryState(ctx: MqttCtx, device: MaisonDevice): Promise<string> {
-  let deviceTopic: string;
-  let subOffCb: OffCb;
-  let deferred: PromiseWithResolvers<string>;
-  let subOpts: SubOpts;
-  deferred = Promise.withResolvers();
-  deviceTopic = `${maisonConfig.z2m_topic_prefix}/${device.name}`;
-  subOpts = {
-    // qos: 2,
-  };
-  subOffCb = await ctx.msgRouter.sub(deviceTopic, subOpts, (evt) => {
-    let payload: unknown;
-    payload = mqttUtil.parsePayload(evt.payload);
-    if(!prim.isObject(payload)) {
-      return deferred.reject(
-        new Error('Expected payload to be an object')
-      );
-    }
-    if(!prim.isString(payload.state)) {
-      return deferred.reject(
-        new Error('Expected payload.state to be a string')
-      );
-    }
-    deferred.resolve(payload.state);
-  });
-  let pubOpts: mqtt.IClientPublishOptions;
-  let pubTopic: string;
-  let pubMsg: string;
-  let pubPromise: Promise<void>;
-  let deviceState: string;
-  pubOpts = {
-    // qos: 0,
-  };
-  pubTopic = `${deviceTopic}/get`;
-  pubMsg = JSON.stringify({ state: '' });
-  pubPromise = new Promise((resolve, reject) => {
-    ctx.msgRouter.publish(pubTopic, pubMsg, pubOpts, (err) => {
-      if(err) {
-        return reject(err);
-      }
-      resolve();
-    });
-  });
-  try {
-    await pubPromise;
-    deviceState = await deferred.promise;
-  } finally {
-    /* always clean up subscriptions _*/
-    subOffCb();
+  let currMsgEvt: MqttMsgEvt;
+  currMsgEvt = await ctx.z2mDeviceService.getStateMsgEvt(device);
+  let payload: unknown;
+  payload = mqttUtil.parsePayload(currMsgEvt.payload);
+  if(!prim.isObject(payload)) {
+    throw new Error('Expected payload to be an object');
   }
-  return deviceState;
+  if(!prim.isString(payload.state)) {
+    throw new Error('Expected payload.state to be a string');
+  }
+  return payload.state;
 }

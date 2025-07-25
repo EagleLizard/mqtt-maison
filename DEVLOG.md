@@ -5,6 +5,12 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [07/23/2025]
+
+I think that the idea of getting device states ad-hoc, meaning subscribing to get the state and then unsubscribing when we get the state, may not be a great approach given z2m network instability / latency.
+
+It may be better to subscribe to all relevant devices on *program start* or *mode change*, and maintain the latest device state that was broadcast. That way, any request to change state that depends on the current state can execute immediately.
+
 ## [07/22/2025]
 
 I think I've figured out a way to reliably timeout and unsub when the `z2m/device/get` message times out. It should also work if a device isn't broadcasting its state. It's a bit crude (polling with `setTimeout`), but seems to work in most cases.

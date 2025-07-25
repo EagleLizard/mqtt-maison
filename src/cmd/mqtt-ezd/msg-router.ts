@@ -129,7 +129,7 @@ export class MsgRouter {
       /* shallow merge */
       pubOpts = Object.assign({}, pubOpts, opts);
     }
-    this.client.publish(topic, message, pubOpts, (err, packet) => {;
+    this.client.publish(topic, message, pubOpts, (err, packet) => {
       return callback?.(err, packet);
     });
   }
