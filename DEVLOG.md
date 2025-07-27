@@ -5,6 +5,33 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [07/27/2025]
+
+The idea to subscribe to device states (from 07/23/2025) at program start is a noticeable improvement. The logic to wait for the state is a lot simpler, even though it's still a bit hacky - I'm polling the device service instead of registering a new `msgRouter` sub handler.
+
+### Device state polling improvement (todo / future)
+
+The logic for waiting for the state to change to the desired state is to sleep and check for a new message in a while loop. The new message may or may not have the desired state.
+
+This works well enough, but could be improved - if I could call a function on `z2m-device-service` that only resolves *when a new message is received*, could use that instead, and it would be slightly better.
+
+### Update on Queueing Actions
+
+I wrote an async queue for handling the the messages one at a time. This doesn't work great in practice, because the expectations I have as a user pressing buttons on a physical device are:
+
+1. changes should happen quickly after pressing a button (fast feedback)
+1. subsequent button presses are:
+    1. due to misclicks, e.g. "Did I actually click the button last time I pressed it?"
+    1. not relevant in rapid succession, because I as a user don't know if I pressed the same button 9 or 10 times
+
+Essentially, maintaining actions in a queue isn't relevant in this context and is annoying when there is zigbee2mqtt latency, because queued messages end up processing slowly and unpredictably.
+
+Instead of a queue, I think it would be a better UX if:
+
+1. An action is expected to complete in a certain amount of time - either succeed, or fail with a timeout
+1. For most actions, like toggling, if a new action happens while one is in progress, we can ignore the new one while we wait for the current to succeed / fail.
+    1. The expectation may be different for different actions, like changing to next / prev. In that case, it may be better for 2 clicks to be queued instead, e.g. clicking "next" 3 times to go to cycle forward 3 modes.
+
 ## [07/23/2025]
 
 I think that the idea of getting device states ad-hoc, meaning subscribing to get the state and then unsubscribing when we get the state, may not be a great approach given z2m network instability / latency.

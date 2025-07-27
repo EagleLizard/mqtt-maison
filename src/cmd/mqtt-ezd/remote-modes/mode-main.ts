@@ -50,6 +50,13 @@ async function actionMain(ctx: MqttCtx) {
       throw new Error(`Unrecognized state ${currState} for device ${device.name}`);
     }
     actPromise = z2mCtrl.setBinaryState(ctx, device, targetState);
+    actPromise = actPromise.then(() => {
+      return z2mCtrl.waitForBinaryState(ctx, device, targetState);
+    }).catch((err) => {
+      // ctx.logger.error(err);
+      throw err;
+    });
+    // await actPromise;
     actPromises.push(actPromise);
   }
   await Promise.all(actPromises);
