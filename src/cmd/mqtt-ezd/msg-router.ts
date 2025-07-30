@@ -101,37 +101,18 @@ export class MsgRouter {
     return subOffCb;
   }
   /* publish to a topic */
-  publish(topic: string, message: string | Buffer): void
-  publish(topic: string, message: string | Buffer, callback?: mqtt.PacketCallback): void
-  publish(topic: string, message: string | Buffer, opts?: PubOpts): void
   publish(
     topic: string,
     message: string | Buffer,
-    opts?: PubOpts,
-    callback?: mqtt.PacketCallback
-  ): void
-  publish(
-    topic: string,
-    message: string | Buffer,
-    opts?: mqtt.PacketCallback | PubOpts,
-    callback?: mqtt.PacketCallback,
-  ) {
+    opts?: PubOpts
+  ): Promise<mqtt.Packet | undefined> {
     let pubOpts: PubOpts;
-
     /* default _*/
     pubOpts = {
       qos: 1,
     };
-    if(typeof opts === 'function' && opts !== undefined) {
-      callback = opts;
-    }
-    if(typeof opts !== 'function' && opts !== undefined) {
-      /* shallow merge */
-      pubOpts = Object.assign({}, pubOpts, opts);
-    }
-    this.client.publish(topic, message, pubOpts, (err, packet) => {
-      return callback?.(err, packet);
-    });
+    pubOpts = Object.assign({}, pubOpts, opts);
+    return this.client.publishAsync(topic, message, pubOpts);
   }
 
   /* returns function to unlisted */

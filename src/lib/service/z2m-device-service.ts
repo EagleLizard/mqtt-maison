@@ -1,7 +1,7 @@
+
 import { MqttMsgEvt, MsgRouter, OffCb } from '../../cmd/mqtt-ezd/msg-router';
 import { maisonConfig } from '../config/maison-config';
 import { MaisonDevice } from '../models/maison-device';
-import { mqttUtil } from './mqtt-util';
 
 type Z2mDeviceServiceParams = {
   devices: MaisonDevice[];
@@ -49,18 +49,9 @@ export class Z2mDeviceService {
       If this is the first request to get the state, publish a message to the device
         to rebroadcast it's state
     _*/
-    let pubPromise: Promise<void>;
     let z2mGetTopic = `${maisonConfig.z2m_topic_prefix}/${device.name}/get`;
     let z2mGetMsg = JSON.stringify({ state: '' });
-    pubPromise = new Promise((resolve, reject) => {
-      this.msgRouter.publish(z2mGetTopic, z2mGetMsg, (err) => {
-        if(err) {
-          return reject(err);
-        }
-        resolve();
-      });
-    });
-    await pubPromise;
+    await this.msgRouter.publish(z2mGetTopic, z2mGetMsg);
     return getMsgEvtPromise;
   }
 

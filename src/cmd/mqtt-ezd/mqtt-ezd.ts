@@ -1,6 +1,5 @@
 
 import mqtt from 'mqtt';
-import { ezdConfig } from '../../config';
 import { logger } from '../../lib/logger/logger';
 import { MqttMsgEvt, MsgRouter } from './msg-router';
 import { MaisonActionPayload } from '../../lib/models/maison-action-payload';
@@ -10,6 +9,7 @@ import { maisonConfig } from '../../lib/config/maison-config';
 import { Z2mDeviceService } from '../../lib/service/z2m-device-service';
 import { EventQueue } from '../../lib/events/event-queue';
 import { MaisonCtrl } from './maison-ctrl';
+import { mqttUtil } from '../../lib/service/mqtt-util';
 
 /*
   To accomplish the desired behavior, the problem is separate into 2 steps:
@@ -32,7 +32,7 @@ export async function mqttEzdMain() {
   console.log('mqtt-ezd main ~');
   ikeaTopic = `${maisonConfig.z2m_topic_prefix}/${maisonConfig.ikea_remote_name}/action`;
   maisonTopic = maisonConfig.maison_action_topic;
-  client = await initClient();
+  client = await mqttUtil.initClient();
   msgRouter = await MsgRouter.init(client, logger);
   z2mDeviceService = await Z2mDeviceService.init({
     devices: maisonConfig.maison_devices,
@@ -56,7 +56,7 @@ export async function mqttEzdMain() {
     // console.log(ctx.msgRouter.topicEventMap); // check for hanging message handlers
     setTimeout(inProgressMaisonPollFn, 5e3);
   };
-  // inProgressMisonPollFn();
+  // inProgressMaisonPollFn();
   let maisonCtrl = await MaisonCtrl.init();
   maisonEvtQueue = EventQueue.init((evt, doneCb) => {
     maisonCtrl.handleMsg(ctx, evt).catch(err => {
@@ -96,48 +96,18 @@ async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
     action: mappedAction,
     dob: (new Date()).toISOString(),
   };
-  let maisonActionPayloadStr = JSON.stringify(maisonActionPayload);
+  let maisonPubMsg = JSON.stringify(maisonActionPayload);
   // console.log(maisonActionPayload);
-  let pubPromise: Promise<void>;
+  let pubPromise: Promise<mqtt.Packet | undefined>;
   let pubOpts: mqtt.IClientPublishOptions;
   pubOpts = {
     // qos: 2,
   };
   let pubTopic: string;
   pubTopic = maisonConfig.maison_action_topic;
-  pubPromise = new Promise((resolve) => {
-    ctx.msgRouter.publish(pubTopic, maisonActionPayloadStr, pubOpts, (err) => {
-      if(err) {
-        ctx.logger.error(err);
-      }
-      resolve();
-    });
+  pubPromise = ctx.msgRouter.publish(pubTopic, maisonPubMsg, pubOpts);
+  pubPromise.catch((err) => {
+    ctx.logger.error(err);
   });
   await pubPromise;
-}
-
-function initClient(): Promise<mqtt.MqttClient> {
-  let p: Promise<mqtt.MqttClient>;
-  let clientId: string;
-  let mqttCfg = ezdConfig.getMqttConfig();
-  let client = mqtt.connect(mqttCfg.mqtt_server, {
-    username: mqttCfg.mqtt_user,
-    password: mqttCfg.mqtt_password,
-    clientId: 'mqtt-maison-ts',
-  });
-  p = new Promise((resolve, reject) => {
-    let errCb: mqtt.OnErrorCallback;
-    let resCb: mqtt.OnConnectCallback;
-    errCb = (err) => {
-      client.off('connect', resCb);
-      reject(err);
-    };
-    resCb = (packet) => {
-      client.off('error', errCb);
-      resolve(client);
-    };
-    client.once('error', errCb);
-    client.once('connect', resCb);
-  });
-  return p;
 }

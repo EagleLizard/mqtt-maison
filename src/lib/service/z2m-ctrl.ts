@@ -1,5 +1,5 @@
 
-import { MqttMsgEvt, OffCb } from '../../cmd/mqtt-ezd/msg-router';
+import { MqttMsgEvt } from '../../cmd/mqtt-ezd/msg-router';
 import { MqttCtx } from '../models/mqtt-ctx';
 import { maisonConfig } from '../config/maison-config';
 import { mqttUtil } from './mqtt-util';
@@ -22,16 +22,7 @@ async function setBinaryState(ctx: MqttCtx, device: MaisonDevice, stateStr: stri
   }
   let z2mSetTopic = `${maisonConfig.z2m_topic_prefix}/${device.name}/set`;
   let setPubMsg = stateStr;
-  let setPubPromise: Promise<void>;
-  setPubPromise = new Promise((resolve, reject) => {
-    ctx.msgRouter.publish(z2mSetTopic, setPubMsg, (err) => {
-      if(err) {
-        reject(err);
-      }
-      resolve();
-    });
-  });
-  await setPubPromise;
+  await ctx.msgRouter.publish(z2mSetTopic, setPubMsg);
 }
 
 async function waitForBinaryState(

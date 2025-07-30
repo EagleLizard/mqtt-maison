@@ -6,10 +6,10 @@ const mqtt_required_keys = [
   'mqtt_user',
   'mqtt_password',
 ] as const;
-const DEV_ENV_STR = 'dev';
-
 type MqttConfigKey = typeof mqtt_required_keys[number];
 type MqttConfig = Record<MqttConfigKey, string> & {};
+
+const DEV_ENV_STR = 'dev';
 
 export const ezdConfig = {
   getMqttConfig,
