@@ -5,8 +5,11 @@ import { maison_actions, MaisonAction } from './maison-actions';
 
 export class MaisonActionPayload {
   action: MaisonAction;
-  constructor(action: MaisonAction) {
+  /* ISO 8691 string _*/
+  dob: string;
+  constructor(action: MaisonAction, dob: string) {
     this.action = action;
+    this.dob = dob;
   }
   static parse(rawVal: Buffer | unknown): MaisonActionPayload {
     if(rawVal instanceof Buffer) {
@@ -21,6 +24,13 @@ export class MaisonActionPayload {
     if(!maison_actions.checkAction(rawVal.action)) {
       throw new Error(`Invalid action: ${rawVal.action}`);
     }
-    return new MaisonActionPayload(rawVal.action);
+    // if((rawVal.dob !== undefined) && !prim.isString(rawVal.dob)) {
+    if((rawVal.dob === undefined) || !prim.isString(rawVal.dob)) {
+      /*
+      TODO: validate datetime strictly
+      _*/
+      throw new Error(`Invalid dob: ${rawVal.dob}`);
+    }
+    return new MaisonActionPayload(rawVal.action, rawVal.dob);
   }
 }

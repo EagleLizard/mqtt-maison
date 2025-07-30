@@ -5,6 +5,67 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [07/28/2025]
+
+Encountered a new error today in zigbee2mqtt:
+
+```
+zh:ember:ezsp: Received network/route error ROUTE_ERROR_NON_TREE_LINK_FAILURE for "21467".
+```
+
+## [07/27/2025]
+
+The idea to subscribe to device states (from 07/23/2025) at program start is a noticeable improvement. The logic to wait for the state is a lot simpler, even though it's still a bit hacky - I'm polling the device service instead of registering a new `msgRouter` sub handler.
+
+### Device state polling improvement (todo / future)
+
+The logic for waiting for the state to change to the desired state is to sleep and check for a new message in a while loop. The new message may or may not have the desired state.
+
+This works well enough, but could be improved - if I could call a function on `z2m-device-service` that only resolves *when a new message is received*, could use that instead, and it would be slightly better.
+
+### Update on Queueing Actions
+
+I wrote an async queue for handling the the messages one at a time. This doesn't work great in practice, because the expectations I have as a user pressing buttons on a physical device are:
+
+1. changes should happen quickly after pressing a button (fast feedback)
+1. subsequent button presses are:
+    1. due to misclicks, e.g. "Did I actually click the button last time I pressed it?"
+    1. not relevant in rapid succession, because I as a user don't know if I pressed the same button 9 or 10 times
+
+Essentially, maintaining actions in a queue isn't relevant in this context and is annoying when there is zigbee2mqtt latency, because queued messages end up processing slowly and unpredictably.
+
+Instead of a queue, I think it would be a better UX if:
+
+1. An action is expected to complete in a certain amount of time - either succeed, or fail with a timeout
+1. For most actions, like toggling, if a new action happens while one is in progress, we can ignore the new one while we wait for the current to succeed / fail.
+    1. The expectation may be different for different actions, like changing to next / prev. In that case, it may be better for 2 clicks to be queued instead, e.g. clicking "next" 3 times to go to cycle forward 3 modes.
+
+## [07/23/2025]
+
+I think that the idea of getting device states ad-hoc, meaning subscribing to get the state and then unsubscribing when we get the state, may not be a great approach given z2m network instability / latency.
+
+It may be better to subscribe to all relevant devices on *program start* or *mode change*, and maintain the latest device state that was broadcast. That way, any request to change state that depends on the current state can execute immediately.
+
+## [07/22/2025]
+
+I think I've figured out a way to reliably timeout and unsub when the `z2m/device/get` message times out. It should also work if a device isn't broadcasting its state. It's a bit crude (polling with `setTimeout`), but seems to work in most cases.
+
+This has been a pain in the ass. As far as I can tell, the issue is with the zigbee2mqtt implementation rather than some misconfiguration of my network or MQTT broker. It may have something to do with the ember/ezsp firmware (based on logs I see containing `zh:ember:ezsp:`).
+
+I *think* `ember` is relatively new in the stack, and I don't recall having issues before its introduction.
+
+On the bright side, this handles a general case when using something like MQTT to interface with physical devices; there could always be instances where a device is not reachable.
+
+## [07/21/2025]
+
+I'm working around an error case in zigbee2mqtt where a `z2m/device/set` message is published successfully, but zigbee2mqtt fails to send the message to the actual device. This is the same issue as [this github issue for "Error: ZCL command genOnOff.on"](https://github.com/Koenkk/zigbee2mqtt/issues/24375).
+
+I think this is an issue with the actual zigbee2mqtt firmware, however I can't find clear solutions / explanations about this specific issue, so it's possible it's signal interference or a hardware problem with my main coordinator.
+
+## [07/20/2025]
+
+It may make more sense to use NodeJS's [native EventEmitter](https://nodejs.org/docs/latest/api/events.html#class-eventemitter) instead of my own EventRegistry class.
+
 ## [07/16/2025]
 
 I am thinking that the action modes might benefit from having a different interface.

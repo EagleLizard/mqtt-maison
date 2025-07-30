@@ -73,6 +73,9 @@ function initLogger(): pino.Logger {
     level,
     formatters: {
       level: (label) => {
+        if(label === 'debug') {
+          label = label.toLocaleUpperCase();
+        }
         return {
           level: label,
         };

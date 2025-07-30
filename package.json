@@ -26,6 +26,7 @@
     "typescript-eslint": "^8.35.1"
   },
   "dependencies": {
+    "@sinclair/typebox": "^0.34.38",
     "dotenv": "^17.0.1",
     "mqtt": "^5.13.1",
     "pino": "^9.7.0",

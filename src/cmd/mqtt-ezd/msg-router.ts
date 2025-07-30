@@ -1,6 +1,7 @@
 import mqtt from 'mqtt';
 import { EventRegistry } from '../../lib/events/event-registry';
 import { EzdLogger } from '../../lib/logger/ezd-logger';
+import { TopicMeta } from '../../lib/models/topic-meta';
 
 /*
 handle topic subscriptions and forward them to the handlers
@@ -22,10 +23,12 @@ export class MsgRouter {
   client: mqtt.MqttClient;
   /* map of topics -> registered events */
   topicEventMap: Map<string, EventRegistry<MqttMsgEvt>>;
+  topicMetaMap: Map<string, TopicMeta>;
   logger: EzdLogger;
   private constructor(client: mqtt.MqttClient, logger: EzdLogger) {
     this.client = client;
     this.topicEventMap = new Map();
+    this.topicMetaMap = new Map();
     this.logger = logger;
   }
 
@@ -46,6 +49,7 @@ export class MsgRouter {
     onMsgCb?: (evt: MqttMsgEvt) => void,
   ): Promise<OffCb> {
     let topicEvtReg: EventRegistry<MqttMsgEvt> | undefined;
+    let topicMeta: TopicMeta | undefined;
     let subPromise: Promise<OffCb>;
     let subOpts: SubOpts;
 
@@ -69,22 +73,32 @@ export class MsgRouter {
       topicEvtReg = new EventRegistry();
       this.topicEventMap.set(topic, topicEvtReg);
     }
+    topicMeta = this.topicMetaMap.get(topic);
+    if(topicMeta === undefined) {
+      topicMeta = TopicMeta.init(topic);
+      this.topicMetaMap.set(topic, topicMeta);
+    }
     /*
       It's not clear if mqtt.js provides a way to check if a topic is
         already subscribed to, so we will subscribe every time
     _*/
+    let deregCb: OffCb;
+    let subOffCb: OffCb;
     subPromise = new Promise((resolve, reject) => {
       this.client.subscribe(topic, subOpts, (err) => {
-        let offCb: OffCb;
         if(err) {
           return reject(err);
         }
-        offCb = topicEvtReg.register(onMsgCb);
-        resolve(offCb);
+        deregCb = topicEvtReg.register(onMsgCb);
+        resolve(deregCb);
       });
     });
-    let offCb = await subPromise;
-    return offCb;
+    deregCb = await subPromise;
+    subOffCb = () => {
+      deregCb();
+      this.unsubIfNoHandlers(topic);
+    };
+    return subOffCb;
   }
   /* publish to a topic */
   publish(topic: string, message: string | Buffer): void
@@ -115,7 +129,7 @@ export class MsgRouter {
       /* shallow merge */
       pubOpts = Object.assign({}, pubOpts, opts);
     }
-    this.client.publish(topic, message, pubOpts, (err, packet) => {;
+    this.client.publish(topic, message, pubOpts, (err, packet) => {
       return callback?.(err, packet);
     });
   }
@@ -139,25 +153,28 @@ export class MsgRouter {
     let evt: MqttMsgEvt;
     let evtReg: EventRegistry<MqttMsgEvt> | undefined;
     evtReg = this.topicEventMap.get(topic);
-    if(evtReg === undefined) {
-      this.logger.warn((`No handlers for message received on topic: ${topic}`));
-    }
-    evt = {
-      topic,
-      payload,
-      packet,
-    };
-    if(evtReg !== undefined && evtReg.eventFnCount() < 1) {
+    if(evtReg === undefined || evtReg.eventFnCount() < 1) {
       /*
       TODO: noisy because some devices always broadcast immediately
         before the client processes the unsubscribe. Could fix by tracking
         when the last function was unsubscribed, and only logging this if a
         message is received on that topic after some cooldown period.
       _*/
-      this.logger.warn({
-        topic,
-      }, 'message with no handler');
+      let topicMeta = this.topicMetaMap.get(topic);
+      if(topicMeta?.unsubbing !== true) {
+        /*
+          Only log for messages received on topics that aren't currently unsubscribing.
+            Unsubscribe happens async, so we may get messages while unsubscribing
+            is in progress.
+        _*/
+        this.logger.warn(`No handlers for message received on topic: ${topic}`);
+      }
     }
+    evt = {
+      topic,
+      payload,
+      packet,
+    };
     evtReg?.fire(evt);
     this.unsubIfNoHandlers(topic);
   };
@@ -167,19 +184,34 @@ export class MsgRouter {
     If there is an event registry that matches,
     _*/
     let evtReg: EventRegistry<MqttMsgEvt> | undefined;
-    let evtCount: number;
+    let topicMeta: TopicMeta | undefined;
+    let fnCount: number;
     evtReg = this.topicEventMap.get(topic);
-    evtCount = evtReg?.eventFnCount() ?? 0;
-    if(evtCount > 0) {
+    fnCount = evtReg?.eventFnCount() ?? 0;
+    if(fnCount > 0) {
       return;
     }
+    topicMeta = this.topicMetaMap.get(topic);
+    if(topicMeta === undefined) {
+      /*
+        should never happen - topic meta is created once and retained for
+          the life of the program
+      _*/
+      throw new Error(`No topic meta exists for topic '${topic}'`);
+    }
+    /*
+    clean up registry
+    NOTE: this shouldn't be done asynchronously otherwise it may delete
+      the topic EventRegistry after a new event has subscribed.
+    _*/
+    this.topicEventMap.delete(topic);
+    topicMeta.unsubbing = true;
     this.client.unsubscribe(topic, (err) => {
+      topicMeta.unsubbing = false;
       if(err) {
         this.logger.error(err);
         throw err;
       }
-      /* clean up registry */
-      this.topicEventMap.delete(topic);
     });
   }
 

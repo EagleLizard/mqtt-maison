@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/EagleLizard/mqtt-maison/src/lib/config"
+	"github.com/EagleLizard/mqtt-maison/src/lib/events"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
@@ -29,19 +30,26 @@ type MqttCtx struct {
 
 func MqttEzdMain() {
 	fmt.Printf("mqttezd main ~\n")
+
+	evtReg := events.NewEventRegistry[MsgEvt]()
+	off1 := evtReg.Register(func(evt MsgEvt) {
+		fmt.Printf("fn1: %s\n", evt.Topic)
+	})
+	off2 := evtReg.Register(func(evt MsgEvt) {
+		fmt.Printf("fn2: %s\n", evt.Topic)
+	})
+	evtReg.Fire(MsgEvt{Topic: "topic1", Payload: []byte{}})
+	off1()
+	evtReg.Fire(MsgEvt{Topic: "topic2", Payload: []byte{}})
+	off2()
+	evtReg.Fire(MsgEvt{Topic: "topic3", Payload: []byte{}})
+	/*  */
+
 	c := initClient()
 	if t := c.Connect(); t.Wait() && t.Error() != nil {
 		panic(t.Error())
 	}
 	ikeaMsgCh := make(chan MsgEvt)
-	// actionTopic := fmt.Sprintf("%s/%s/action", z2m_prefix, ikea_remote_name)
-	// fn := func(client mqtt.Client, msg mqtt.Message) {
-	// 	msgEvt := MsgEvt{msg.Topic(), msg.Payload()}
-	// 	ikeaMsgCh <- msgEvt
-	// }
-	// if t := c.Subscribe(actionTopic, 0, fn); t.Wait() && t.Error() != nil {
-	// 	panic(t.Error())
-	// }
 	ikeaDoneCh := make(chan struct{})
 	ctx := MqttCtx{
 		Client: c,
@@ -49,13 +57,6 @@ func MqttEzdMain() {
 	}
 	/* target device listener for debugging _*/
 	deviceTargetMsgCh := make(chan MsgEvt)
-	// deviceTargetTopic := z2m_prefix + "/" + z2m_device_target
-	// deviceTargetFn := func(client mqtt.Client, msg mqtt.Message) {
-	// 	deviceTargetMsgCh <- MsgEvt{msg.Topic(), msg.Payload()}
-	// }
-	// if t := c.Subscribe(deviceTargetTopic, 0, deviceTargetFn); t.Wait() && t.Error() != nil {
-	// 	panic(t.Error())
-	// }
 	deviceTargetDoneCh := make(chan struct{})
 	go func() {
 		receivedCount := 0
@@ -80,7 +81,7 @@ func MqttEzdMain() {
 }
 
 type MaisonActionPayload struct {
-	Action string `json:"action`
+	Action string `json:"action"`
 }
 
 func subMaisonActions(ctx MqttCtx, client mqtt.Client) chan struct{} {
