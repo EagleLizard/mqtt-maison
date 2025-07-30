@@ -2,14 +2,14 @@
 import mqtt from 'mqtt';
 import { ezdConfig } from '../../config';
 import { logger } from '../../lib/logger/logger';
-import { MqttMsgEvt, MsgRouter, OffCb } from './msg-router';
+import { MqttMsgEvt, MsgRouter } from './msg-router';
 import { MaisonActionPayload } from '../../lib/models/maison-action-payload';
 import { maison_actions, MaisonAction } from '../../lib/models/maison-actions';
 import { MqttCtx } from '../../lib/models/mqtt-ctx';
-import { modeMain } from './remote-modes/mode-main';
 import { maisonConfig } from '../../lib/config/maison-config';
 import { Z2mDeviceService } from '../../lib/service/z2m-device-service';
 import { EventQueue } from '../../lib/events/event-queue';
+import { MaisonCtrl } from './maison-ctrl';
 
 /*
   To accomplish the desired behavior, the problem is separate into 2 steps:
@@ -48,17 +48,18 @@ export async function mqttEzdMain() {
     ikeaMsgHandler(ctx, evt);
   });
   let inProgressMaisonReqs = 0;
-  const inProgressMisonPollFn = () => {
+  const inProgressMaisonPollFn = () => {
     ctx.logger.debug({
       handler: 'maisonMsg',
       inProgressReqs: inProgressMaisonReqs,
     });
     // console.log(ctx.msgRouter.topicEventMap); // check for hanging message handlers
-    setTimeout(inProgressMisonPollFn, 5e3);
+    setTimeout(inProgressMaisonPollFn, 5e3);
   };
   // inProgressMisonPollFn();
+  let maisonCtrl = await MaisonCtrl.init();
   maisonEvtQueue = EventQueue.init((evt, doneCb) => {
-    maisonMsgHandler(ctx, evt).catch(err => {
+    maisonCtrl.handleMsg(ctx, evt).catch(err => {
       doneCb(err);
     }).finally(() => {
       doneCb();
@@ -71,7 +72,7 @@ export async function mqttEzdMain() {
     //   inProgressMaisonReqs--;
     // });
 
-    maisonMsgHandler(ctx, evt).catch(err => {
+    maisonCtrl.handleMsg(ctx, evt).catch((err) => {
       ctx.logger.error(err);
     }).finally(() => {
       inProgressMaisonReqs--;
@@ -79,44 +80,6 @@ export async function mqttEzdMain() {
   });
   msgRouter.listen();
   logger.info('mqtt-ezd start');
-}
-
-async function maisonMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
-  let actionPayload: MaisonActionPayload;
-  try {
-    actionPayload = MaisonActionPayload.parse(evt.payload);
-  } catch(e) {
-    ctx.logger.error(e);
-    return;
-  }
-  ctx.logger.info({
-    topic: evt.topic,
-    payload: actionPayload,
-  });
-  if(actionPayload.dob !== undefined) {
-    console.log(`age: ${Date.now() - (new Date(actionPayload.dob)).valueOf()}ms`);
-  }
-  if(actionPayload.action === 'main') {
-    await modeMain.main(ctx);
-  } else if(actionPayload.action === 'up') {
-    await modeMain.up(ctx);
-  } else if(actionPayload.action === 'down') {
-    await modeMain.down(ctx);
-  } else if(actionPayload.action === 'dot') {
-    let getPubMsg = JSON.stringify({ state: '' });
-    ctx.msgRouter.publish(`${maisonConfig.z2m_topic_prefix}/croc/get`, getPubMsg, (err) => {
-      if(err) {
-        ctx.logger.error(err);
-      }
-      ctx.logger.debug('croc/get');
-    });
-  } else {
-    ctx.logger.info(`unhandled action ${evt.topic}: '${actionPayload.action}'`);
-  }
-  ctx.logger.debug({
-    topic: evt.topic,
-    action: actionPayload
-  }, 'END maisonMsgHandler()');
 }
 
 async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {

@@ -5,6 +5,14 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [07/28/2025]
+
+Encountered a new error today in zigbee2mqtt:
+
+```
+zh:ember:ezsp: Received network/route error ROUTE_ERROR_NON_TREE_LINK_FAILURE for "21467".
+```
+
 ## [07/27/2025]
 
 The idea to subscribe to device states (from 07/23/2025) at program start is a noticeable improvement. The logic to wait for the state is a lot simpler, even though it's still a bit hacky - I'm polling the device service instead of registering a new `msgRouter` sub handler.
