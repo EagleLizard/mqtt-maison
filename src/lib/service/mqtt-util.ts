@@ -34,6 +34,7 @@ function initClient(): Promise<mqtt.MqttClient> {
   let client = mqtt.connect(mqttCfg.mqtt_server, {
     username: mqttCfg.mqtt_user,
     password: mqttCfg.mqtt_password,
+    // reconnectPeriod: 0,
     clientId,
   });
   p = new Promise((resolve, reject) => {

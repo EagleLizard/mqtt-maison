@@ -17,6 +17,12 @@ const maison_devices: MaisonDevice[] = [
   {
     name: 'rabbit',
   },
+  {
+    name: 'sengled_light_1',
+  },
+  {
+    name: 'sengled_light_2',
+  },
 ];
 
 export const maisonConfig = {
