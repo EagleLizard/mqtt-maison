@@ -6,6 +6,7 @@ import assert from 'node:assert';
 const cmd_map = {
   mqtt: 'mqtt',
   etc: 'etc',
+  db: 'db', // init db
 } as const;
 assert(Object.entries(cmd_map).every(([ key, val ]) => {
   return key === val;
@@ -34,6 +35,9 @@ async function main() {
       break;
     case cmd_map.etc:
       await (await import('./cmd/etc/etc-ezd')).etcEzdMain();
+      break;
+    case cmd_map.db:
+      await (await import('./cmd/mqtt-db/mqtt-db')).mqttDbMain();
       break;
     default:
       printCmds();

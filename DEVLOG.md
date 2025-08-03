@@ -5,6 +5,10 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [08/02/2025]
+
+I adding a sqlite database. Why am I adding a sqlite database? I have either lost sight of the vision or never had one. Until I can answer the question, I will not worry about it.
+
 ## [07/28/2025]
 
 Encountered a new error today in zigbee2mqtt:

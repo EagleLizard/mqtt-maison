@@ -45,7 +45,7 @@ export async function mqttEzdMain() {
     z2mDeviceService,
   };
   let ikeaOffCb = await msgRouter.sub(ikeaTopic, (evt) => {
-    ikeaMsgHandler(ctx, evt);
+    ikeaMsgHandler(ctx, evt).catch(ctx.logger.error);
   });
   let inProgressMaisonReqs = 0;
   const inProgressMaisonPollFn = () => {
@@ -77,6 +77,10 @@ export async function mqttEzdMain() {
     }).finally(() => {
       inProgressMaisonReqs--;
     });
+  });
+  client.once('end', () => {
+    ikeaOffCb();
+    maisonOffCb();
   });
   msgRouter.listen();
   logger.info('mqtt-ezd start');

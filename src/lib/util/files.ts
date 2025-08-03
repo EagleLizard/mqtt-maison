@@ -5,9 +5,14 @@ import fs from 'node:fs';
 import { prim } from './validate-primitives';
 
 export const files = {
-  checkDir,
-  mkdirIfNotExist,
+  checkFile: checkFile,
+  checkDir: checkDir,
+  mkdirIfNotExist: mkdirIfNotExist,
 } as const;
+
+function checkFile(filePath: string): boolean {
+  return fs.existsSync(filePath);
+}
 
 function checkDir(dirPath: string): boolean {
   let stats: Stats;
