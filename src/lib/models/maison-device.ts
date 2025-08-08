@@ -2,7 +2,7 @@
 import { Static, Type } from '@sinclair/typebox';
 import { tbUtil } from '../util/tb-util';
 
-const MaisonDeviceTSchema = Type.Object({
+const MaisonDeviceDefTSchema = Type.Object({
   /*
     Currently I'll target just the binary state features of devices,
       which are available on switches and lights.
@@ -12,7 +12,7 @@ const MaisonDeviceTSchema = Type.Object({
   name: Type.String(), // friendly_name
 });
 
-export type MaisonDevice = Static<typeof MaisonDeviceTSchema>;
+export type MaisonDeviceDef = Static<typeof MaisonDeviceDefTSchema>;
 
 /*
 TypeCompiler version. not sure this is a great abstraction so stubbing for now
@@ -24,13 +24,13 @@ _*/
 //   };
 // })();
 
-export const MaisonDeviceSchema = {
-  parse: maisonDeviceParse,
-  tschema: MaisonDeviceTSchema,
+export const MaisonDeviceDefSchema = {
+  parse: maisonDeviceDefParse,
+  tschema: MaisonDeviceDefTSchema,
 } as const;
 
-function maisonDeviceParse(rawVal: unknown): MaisonDevice {
-  return tbUtil.decodeWithSchema(MaisonDeviceTSchema, rawVal);
+function maisonDeviceDefParse(rawVal: unknown): MaisonDeviceDef {
+  return tbUtil.decodeWithSchema(MaisonDeviceDefTSchema, rawVal);
 }
 
 // export type MaisonDevice = {

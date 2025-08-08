@@ -57,7 +57,9 @@ export async function mqttEzdMain() {
     setTimeout(inProgressMaisonPollFn, 5e3);
   };
   // inProgressMaisonPollFn();
-  let maisonCtrl = await MaisonCtrl.init();
+  let maisonCtrl = await MaisonCtrl.init({
+    deviceDefs: maisonConfig.maison_devices,
+  });
   maisonEvtQueue = EventQueue.init((evt, doneCb) => {
     maisonCtrl.handleMsg(ctx, evt).catch(err => {
       doneCb(err);

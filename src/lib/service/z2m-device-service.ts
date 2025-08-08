@@ -1,10 +1,10 @@
 
 import { MqttMsgEvt, MsgRouter, OffCb } from '../../cmd/mqtt-ezd/msg-router';
 import { maisonConfig } from '../config/maison-config';
-import { MaisonDevice } from '../models/maison-device';
+import { MaisonDeviceDef } from '../models/maison-device';
 
 type Z2mDeviceServiceParams = {
-  devices: MaisonDevice[];
+  devices: MaisonDeviceDef[];
   msgRouter: MsgRouter;
 };
 
@@ -14,7 +14,7 @@ type DeviceStateMsg = {
 };
 
 type DeviceStateStoreItem = {
-  device: MaisonDevice;
+  device: MaisonDeviceDef;
   subOffCb: OffCb;
   lastMsg?: DeviceStateMsg;
   /* only used for the first call to get _*/
@@ -22,7 +22,7 @@ type DeviceStateStoreItem = {
 }
 
 export class Z2mDeviceService {
-  devices: MaisonDevice[];
+  devices: MaisonDeviceDef[];
   msgRouter: MsgRouter;
   deviceStateStore: Map<string, DeviceStateStoreItem>;
   private constructor(params: Z2mDeviceServiceParams) {
@@ -31,7 +31,7 @@ export class Z2mDeviceService {
     this.deviceStateStore = new Map();
   }
 
-  async getStateMsgEvt(device: MaisonDevice): Promise<MqttMsgEvt> {
+  async getStateMsgEvt(device: MaisonDeviceDef): Promise<MqttMsgEvt> {
     let deviceStoreItem: DeviceStateStoreItem | undefined;
     let getMsgEvtPromise: Promise<MqttMsgEvt>;
     deviceStoreItem = this.deviceStateStore.get(device.name);
@@ -70,7 +70,7 @@ export class Z2mDeviceService {
       });
     }
   }
-  private handleDeviceMsg(device: MaisonDevice, evt: MqttMsgEvt) {
+  private handleDeviceMsg(device: MaisonDeviceDef, evt: MqttMsgEvt) {
     let deviceStoreItem: DeviceStateStoreItem | undefined;
     let receivedAt: number;
     deviceStoreItem = this.deviceStateStore.get(device.name);

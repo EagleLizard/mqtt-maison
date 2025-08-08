@@ -5,7 +5,7 @@ import { files } from '../../lib/util/files';
 import { CONFIG_DIR_PATH, MAISON_DEVICES_DEF_FILE_NAME } from '../../constants';
 import { maisonConfig } from '../../lib/config/maison-config';
 import { SqliteClient } from '../../lib/db/sqlite-client';
-import { MaisonDeviceSchema } from '../../lib/models/maison-device';
+import { MaisonDeviceDefSchema } from '../../lib/models/maison-device';
 import { MaisonDeviceDto, MaisonDeviceDtoSchema } from '../../lib/models/maison-device-dto';
 
 const MAISON_DEVICES_DEF_FILE_PATH = [
@@ -30,7 +30,7 @@ export async function mqttDbMain() {
   if(!Array.isArray(rawDevices)) {
     throw new Error('Invalid devices: expected devices to be an array.');
   }
-  let deviceDefs = rawDevices.map(MaisonDeviceSchema.parse);
+  let deviceDefs = rawDevices.map(MaisonDeviceDefSchema.parse);
   let getDeviceStmt = db.prepare('select * from ezd_device ed where ed.name = @name');
   for(let i = 0; i < deviceDefs.length; i++) {
     let deviceDef = deviceDefs[i];
