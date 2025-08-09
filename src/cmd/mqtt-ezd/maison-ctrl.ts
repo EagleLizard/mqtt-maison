@@ -1,5 +1,6 @@
 
 import { MaisonActionPayload } from '../../lib/models/maison-action-payload';
+import { MaisonAction } from '../../lib/models/maison-actions';
 import { MaisonDeviceDef } from '../../lib/models/maison-device';
 import { MqttCtx } from '../../lib/models/mqtt-ctx';
 import { z2mCtrl } from '../../lib/service/z2m-ctrl';
@@ -32,15 +33,7 @@ export class MaisonCtrl {
   private etcLightDeviceDefs: MaisonDeviceDef[];
   private selectedDeviceIdx: number;
 
-  private mainInProgress: boolean;
-  private dotInProgress: boolean;
-  private dotDoubleInProgress: boolean;
-  private dotsInProgress: boolean;
-  private dotsDoubleInProgress: boolean;
-  private nextInProgress: boolean;
-  private prevInProgress: boolean;
-  private upInProgress: boolean;
-  private downInProgress: boolean;
+  private inProgressMap: Partial<Record<MaisonAction, boolean>>;
 
   private constructor(opts: MaisonCtrlCtorOpts) {
     this.deviceDefs = opts.deviceDefs;
@@ -51,15 +44,7 @@ export class MaisonCtrl {
       return etc_light_device_names.includes(device.name);
     });
     this.selectedDeviceIdx = 0;
-    this.mainInProgress = false;
-    this.dotInProgress = false;
-    this.dotDoubleInProgress = false;
-    this.dotsInProgress = false;
-    this.dotsDoubleInProgress = false;
-    this.nextInProgress = false;
-    this.prevInProgress = false;
-    this.upInProgress = false;
-    this.downInProgress = false;
+    this.inProgressMap = {};
   }
 
   async handleMsg(ctx: MqttCtx, evt: MqttMsgEvt) {
@@ -68,6 +53,22 @@ export class MaisonCtrl {
     let endMs: number;
     let msgAgeMs: number;
     let msgDob: Date;
+    let msgHandlerMap: Partial<Record<MaisonAction, (ctx: MqttCtx) => Promise<void>>>;
+    // let msgHandlerMap: Map<MaisonAction, (ctx: MqttCtx) => Promise<void>>;
+    let msgFn: ((ctx: MqttCtx) => Promise<void>) | undefined;
+    let handleMsgPromise: Promise<void>;
+
+    msgHandlerMap = {
+      'main': this.handleMain.bind(this),
+      'up': this.handleUp.bind(this),
+      'down': this.handleDown.bind(this),
+      'dot': this.handleDot.bind(this),
+      'dot_double': this.handleDotDouble.bind(this),
+      'dots': this.handleDots.bind(this),
+      'dots_double': this.handleDotsDouble.bind(this),
+      'next': this.handleNext.bind(this),
+      'prev': this.handlePrev.bind(this),
+    };
 
     try {
       payload = MaisonActionPayload.parse(evt.payload);
@@ -84,27 +85,22 @@ export class MaisonCtrl {
     });
     // ctx.logger.debug({ action: payload.action, age: msgAgeMs });
     console.log(`age: ${msgAgeMs} ms`);
-    if(payload.action === 'main') {
-      await this.handleMain(ctx);
-    } else if(payload.action === 'up') {
-      await this.handleUp(ctx);
-    } else if(payload.action === 'down') {
-      await this.handleDown(ctx);
-    } else if(payload.action === 'dot') {
-      /* todo: dot */
-      await this.handleDot(ctx);
-    } else if(payload.action === 'dot_double') {
-      await this.handleDotDouble(ctx);
-    } else if(payload.action === 'dots') {
-      await this.handleDots(ctx);
-    } else if(payload.action === 'dots_double') {
-      await this.handleDotsDouble(ctx);
-    } else if(payload.action === 'next') {
-      await this.handleNext(ctx);
-    } else if(payload.action === 'prev') {
-      await this.handlePrev(ctx);
-    } else {
+    msgFn = msgHandlerMap[payload.action];
+    if(msgFn === undefined) {
       ctx.logger.info(`unhandled action ${evt.topic}: '${payload.action}'`);
+    }
+    let inProgress = !!this.inProgressMap[payload.action];
+    if(inProgress) {
+      ctx.logger.debug(`${payload.action} !!!!! - in progress`);
+      handleMsgPromise = Promise.resolve();
+    } else {
+      handleMsgPromise = msgFn?.(ctx) ?? Promise.resolve();
+    }
+    this.inProgressMap[payload.action] = true;
+    try {
+      await handleMsgPromise;
+    } finally {
+      this.inProgressMap[payload.action] = false;
     }
     endMs = Date.now();
     /*
@@ -121,52 +117,16 @@ export class MaisonCtrl {
   }
 
   private async handleUp(ctx: MqttCtx) {
-    if(this.upInProgress) {
-      ctx.logger.debug('handleUp() - in progress');
-      return;
-    }
-    this.upInProgress = true;
-    try {
-      await actionUp(ctx, this.deviceDefs);
-    } finally {
-      this.upInProgress = false;
-    }
+    await actionUp(ctx, this.deviceDefs);
   }
   private async handleDown(ctx: MqttCtx) {
-    if(this.downInProgress) {
-      ctx.logger.debug('handleDown() - in progress');
-      return;
-    }
-    this.downInProgress = true;
-    try {
-      await actionDown(ctx, this.deviceDefs);
-    } finally {
-      this.downInProgress = false;
-    }
+    await actionDown(ctx, this.deviceDefs);
   }
   private async handlePrev(ctx: MqttCtx) {
-    if(this.prevInProgress) {
-      ctx.logger.debug('handlePrev() - in progress');
-      return;
-    }
-    this.prevInProgress = true;
-    try {
-      await this.seekEtc(ctx, -1);
-    } finally {
-      this.prevInProgress = false;
-    }
+    await this.seekEtc(ctx, -1);
   }
   private async handleNext(ctx: MqttCtx) {
-    if(this.nextInProgress) {
-      ctx.logger.debug('handleNext() - in progress');
-      return;
-    }
-    this.nextInProgress = true;
-    try {
-      await this.seekEtc(ctx, 1);
-    } finally {
-      this.nextInProgress = false;
-    }
+    await this.seekEtc(ctx, 1);
   }
   /*
     -1 or 1
@@ -200,37 +160,14 @@ export class MaisonCtrl {
   }
 
   private async handleDot(ctx: MqttCtx) {
-    if(this.dotInProgress) {
-      ctx.logger.debug('handleDot() - in progress');
-      return;
-    }
-    this.dotInProgress = true;
-    try {
-      // await blinkBinaryDevice(ctx, selectedDevice, numBlinks);
-      console.log('dot');
-    } finally {
-      this.dotInProgress = false;
-    }
+    console.log('dot');
   }
   private async handleDotDouble(ctx: MqttCtx) {
-    if(this.dotDoubleInProgress) {
-      ctx.logger.debug('handleDotDouble() - in progress');
-      return;
-    }
-    this.dotDoubleInProgress = true;
-    try {
-      await actionMain(ctx, this.etcLightDeviceDefs);
-    } finally {
-      this.dotDoubleInProgress = false;
-    }
+    await actionMain(ctx, this.etcLightDeviceDefs);
   }
 
   private async handleDots(ctx: MqttCtx) {
     let selectedDevice: MaisonDeviceDef | undefined;
-    if(this.dotsInProgress) {
-      ctx.logger.debug('handleDots() - in progress');
-      return;
-    }
     selectedDevice = this.etcLightDeviceDefs[this.selectedDeviceIdx];
     if(selectedDevice === undefined) {
       /* TODO: error, invalid index */
@@ -238,43 +175,20 @@ export class MaisonCtrl {
     }
     /* blink the current light */
     let numBlinks = 2;
-    this.dotsInProgress = true;
-    try {
-      await blinkBinaryDevice(ctx, selectedDevice, numBlinks);
-    } finally {
-      this.dotsInProgress = false;
-    }
+    await blinkBinaryDevice(ctx, selectedDevice, numBlinks);
   }
   private async handleDotsDouble(ctx: MqttCtx) {
     let selectedDevice: MaisonDeviceDef | undefined;
-    if(this.dotsDoubleInProgress) {
-      ctx.logger.debug('handleDotsDouble() - in progress');
-      return;
-    }
     selectedDevice = this.etcLightDeviceDefs[this.selectedDeviceIdx];
     if(selectedDevice === undefined) {
       /* TODO: error, invalid index */
       return;
     }
-    this.dotsDoubleInProgress = true;
-    try {
-      await actionToggle(ctx, selectedDevice);
-    } finally {
-      this.dotsDoubleInProgress = false;
-    }
+    await actionToggle(ctx, selectedDevice);
   }
 
   private async handleMain(ctx: MqttCtx) {
-    if(this.mainInProgress) {
-      ctx.logger.debug('handleMain() - in progress');
-      return;
-    }
-    this.mainInProgress = true;
-    try {
-      await actionMain(ctx, this.actionMainDeviceDefs);
-    } finally {
-      this.mainInProgress = false;
-    }
+    await actionMain(ctx, this.actionMainDeviceDefs);
   }
 
   static async init(opts: MaisonCtrlCtorOpts): Promise<MaisonCtrl> {
