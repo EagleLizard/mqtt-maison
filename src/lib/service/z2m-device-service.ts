@@ -18,7 +18,7 @@ type DeviceStateStoreItem = {
   subOffCb: OffCb;
   lastMsg?: DeviceStateMsg;
   /* only used for the first call to get _*/
-  initialMsgEvt: PromiseWithResolvers<MqttMsgEvt>;
+  initialMsgEvt?: PromiseWithResolvers<MqttMsgEvt>;
 }
 
 export class Z2mDeviceService {
@@ -84,7 +84,7 @@ export class Z2mDeviceService {
     };
     if(deviceStoreItem.initialMsgEvt !== undefined) {
       deviceStoreItem.initialMsgEvt.resolve(deviceStoreItem.lastMsg.evt);
-      // deviceStoreItem.initialMsgEvt = undefined;
+      deviceStoreItem.initialMsgEvt = undefined;
     }
   }
   static async init(params: Z2mDeviceServiceParams): Promise<Z2mDeviceService> {

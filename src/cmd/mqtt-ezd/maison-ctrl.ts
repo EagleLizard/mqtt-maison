@@ -34,6 +34,7 @@ export class MaisonCtrl {
   private selectedDeviceIdx: number;
 
   private inProgressMap: Partial<Record<MaisonAction, boolean>>;
+  private msgHandlerMap: Map<MaisonAction, (ctx: MqttCtx) => Promise<void>>;
 
   private constructor(opts: MaisonCtrlCtorOpts) {
     this.deviceDefs = opts.deviceDefs;
@@ -45,6 +46,26 @@ export class MaisonCtrl {
     });
     this.selectedDeviceIdx = 0;
     this.inProgressMap = {};
+    this.msgHandlerMap = this.initMsgHandlers();
+  }
+
+  private initMsgHandlers(): MaisonCtrl['msgHandlerMap'] {
+    let msgHandlerMap: MaisonCtrl['msgHandlerMap'] = new Map();
+    let msgHandlerTuples: [MaisonAction, (ctx: MqttCtx) => Promise<void>][] = [
+      [ 'main', this.handleMain ],
+      [ 'up', this.handleUp ],
+      [ 'down', this.handleDown ],
+      [ 'dot', this.handleDot ],
+      [ 'dot_double', this.handleDotDouble ],
+      [ 'dots', this.handleDots ],
+      [ 'dots_double', this.handleDotsDouble ],
+      [ 'next', this.handleNext ],
+      [ 'prev', this.handlePrev ],
+    ];
+    msgHandlerTuples.forEach(([ action, handleFn ]) => {
+      msgHandlerMap.set(action, handleFn.bind(this));
+    });
+    return msgHandlerMap;
   }
 
   async handleMsg(ctx: MqttCtx, evt: MqttMsgEvt) {
@@ -53,29 +74,12 @@ export class MaisonCtrl {
     let endMs: number;
     let msgAgeMs: number;
     let msgDob: Date;
-    let msgHandlerMap: Partial<Record<MaisonAction, (ctx: MqttCtx) => Promise<void>>>;
+    // let msgHandlerMap: Partial<Record<MaisonAction, (ctx: MqttCtx) => Promise<void>>>;
     // let msgHandlerMap: Map<MaisonAction, (ctx: MqttCtx) => Promise<void>>;
     let msgFn: ((ctx: MqttCtx) => Promise<void>) | undefined;
-    let handleMsgPromise: Promise<void>;
 
-    msgHandlerMap = {
-      'main': this.handleMain.bind(this),
-      'up': this.handleUp.bind(this),
-      'down': this.handleDown.bind(this),
-      'dot': this.handleDot.bind(this),
-      'dot_double': this.handleDotDouble.bind(this),
-      'dots': this.handleDots.bind(this),
-      'dots_double': this.handleDotsDouble.bind(this),
-      'next': this.handleNext.bind(this),
-      'prev': this.handlePrev.bind(this),
-    };
+    payload = MaisonActionPayload.parse(evt.payload);
 
-    try {
-      payload = MaisonActionPayload.parse(evt.payload);
-    } catch(e) {
-      ctx.logger.error(e);
-      return;
-    }
     startMs = Date.now();
     msgDob = new Date(payload.dob);
     msgAgeMs = startMs - msgDob.valueOf();
@@ -85,22 +89,13 @@ export class MaisonCtrl {
     });
     // ctx.logger.debug({ action: payload.action, age: msgAgeMs });
     console.log(`age: ${msgAgeMs} ms`);
-    msgFn = msgHandlerMap[payload.action];
+    // msgFn = this.msgHandlerMap[payload.action];
+    msgFn = this.msgHandlerMap.get(payload.action);
     if(msgFn === undefined) {
       ctx.logger.info(`unhandled action ${evt.topic}: '${payload.action}'`);
     }
-    let inProgress = !!this.inProgressMap[payload.action];
-    if(inProgress) {
-      ctx.logger.debug(`${payload.action} !!!!! - in progress`);
-      handleMsgPromise = Promise.resolve();
-    } else {
-      handleMsgPromise = msgFn?.(ctx) ?? Promise.resolve();
-    }
-    this.inProgressMap[payload.action] = true;
-    try {
-      await handleMsgPromise;
-    } finally {
-      this.inProgressMap[payload.action] = false;
+    if(msgFn !== undefined) {
+      await msgFn(ctx);
     }
     endMs = Date.now();
     /*
@@ -116,6 +111,18 @@ export class MaisonCtrl {
     }, 'END maisonCtrl.handleMsg()');
   }
 
+  private async handleMain(ctx: MqttCtx) {
+    if(this.inProgressMap['main'] === true) {
+      ctx.logger.debug('handleMain() - in progress');
+      return;
+    }
+    this.inProgressMap['main'] = true;
+    try {
+      await actionMain(ctx, this.actionMainDeviceDefs);
+    } finally {
+      this.inProgressMap['main'] = false;
+    }
+  }
   private async handleUp(ctx: MqttCtx) {
     await actionUp(ctx, this.deviceDefs);
   }
@@ -187,10 +194,6 @@ export class MaisonCtrl {
     await actionToggle(ctx, selectedDevice);
   }
 
-  private async handleMain(ctx: MqttCtx) {
-    await actionMain(ctx, this.actionMainDeviceDefs);
-  }
-
   static async init(opts: MaisonCtrlCtorOpts): Promise<MaisonCtrl> {
     if(ctrlInstance === undefined) {
       ctrlInstance = new MaisonCtrl(opts);
@@ -211,14 +214,15 @@ async function blinkBinaryDevice(
   numBlinks: number
 ): Promise<void> {
   let numToggles = numBlinks * 2;
-  let currState = await z2mCtrl.getBinaryState(ctx, device);
+  // let currState = await z2mCtrl.getBinaryState(ctx, device);
   let toggleDelayMs = 200;
   for(let i = 0; i < numToggles; i++) {
     let startMs: number;
     let elapsedMs: number;
     let remainingDelayMs: number;
     startMs = Date.now();
-    currState = await toggleBinaryState(ctx, device, currState);
+    let currState = await z2mCtrl.getBinaryState(ctx, device);
+    await toggleBinaryState(ctx, device, currState);
     elapsedMs = Date.now() - startMs;
     if((i < numToggles - 1) && elapsedMs < toggleDelayMs) {
       /* wait for the remaining time */
@@ -263,7 +267,7 @@ async function actionDown(ctx: MqttCtx, devices: MaisonDeviceDef[]): Promise<voi
 async function actionMain(ctx: MqttCtx, devices: MaisonDeviceDef[]) {
   let binStatePromises: Promise<string>[];
   let binStates: string[];
-  let actPromises: Promise<string>[];
+  let actPromises: Promise<void>[];
   binStatePromises = [];
   for(let i = 0; i < devices.length; i++) {
     let device = devices[i];
@@ -275,17 +279,16 @@ async function actionMain(ctx: MqttCtx, devices: MaisonDeviceDef[]) {
     return binState === binStates[0];
   });
   if(!synced) {
-    /*
-      TODO: sync devices - could select a 'leader' somehow,
-        and set all devices to that device's state.
-    _*/
     ctx.logger.warn('Devices out of sync');
   }
   actPromises = [];
   for(let i = 0; i < devices.length; i++) {
-    let actPromise: Promise<string>;
+    let actPromise: Promise<void>;
     let device = devices[i];
     let currState = binStates[i];
+    if(!synced) {
+      currState = binStates[0];
+    }
     actPromise = toggleBinaryState(ctx, device, currState);
     actPromises.push(actPromise);
   }
@@ -296,7 +299,7 @@ async function toggleBinaryState(
   ctx: MqttCtx,
   device: MaisonDeviceDef,
   currState: string
-): Promise<string> {
+): Promise<void> {
   let targetState: string;
   if(currState === 'ON') {
     targetState = 'OFF';
@@ -311,5 +314,4 @@ async function toggleBinaryState(
   }
   await z2mCtrl.setBinaryState(ctx, device, targetState);
   await z2mCtrl.waitForBinaryState(ctx, device, targetState);
-  return targetState;
 }

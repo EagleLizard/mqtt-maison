@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "description": "This is a project to replace some MQTT-based Node-RED automations which required custom scripts to glue different workflow steps together.",
   "main": "index.js",
+  "engines": {
+    "node": "^22.18.0"
+  },
   "scripts": {
     "dev": "node --watch --watch-preserve-output dist/main.js mqtt",
     "test": "echo \"Error: no test specified\" && exit 1"

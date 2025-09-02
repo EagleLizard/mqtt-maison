@@ -4,7 +4,7 @@ import { MqttCtx } from '../models/mqtt-ctx';
 import { maisonConfig } from '../config/maison-config';
 import { mqttUtil } from './mqtt-util';
 import { prim } from '../util/validate-primitives';
-import { MaisonDevice } from '../models/maison-device';
+import { MaisonDeviceDef } from '../models/maison-device';
 import { Z2mDeviceMsg, Z2mDeviceMsgSchema } from '../models/z2m-device-msg';
 import { sleep } from '../util/sleep';
 
@@ -16,7 +16,11 @@ export const z2mCtrl = {
   waitForBinaryState: waitForBinaryState,
 } as const;
 
-async function setBinaryState(ctx: MqttCtx, device: MaisonDevice, stateStr: string): Promise<void> {
+async function setBinaryState(
+  ctx: MqttCtx,
+  device: MaisonDeviceDef,
+  stateStr: string
+): Promise<void> {
   if(stateStr !== 'ON' && stateStr !== 'OFF') {
     throw new Error(`Invalid state string '${stateStr}'`);
   }
@@ -61,7 +65,7 @@ async function waitForBinaryState(
   }
 }
 
-async function getBinaryState(ctx: MqttCtx, device: MaisonDevice): Promise<string> {
+async function getBinaryState(ctx: MqttCtx, device: MaisonDeviceDef): Promise<string> {
   let currMsgEvt: MqttMsgEvt;
   currMsgEvt = await ctx.z2mDeviceService.getStateMsgEvt(device);
   let payload: unknown;

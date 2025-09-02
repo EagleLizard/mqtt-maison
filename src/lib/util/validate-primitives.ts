@@ -23,5 +23,5 @@ export function isPromise<T>(val: unknown): val is Promise<T> {
   if(val instanceof Promise) {
     return true;
   }
-  return ((typeof (val as any)?.then) === 'function');
+  return (typeof val?.then) === 'function';
 }
