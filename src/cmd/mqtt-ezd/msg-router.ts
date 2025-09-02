@@ -1,7 +1,8 @@
 import mqtt from 'mqtt';
-import { EventRegistry } from '../../lib/events/event-registry';
 import { EzdLogger } from '../../lib/logger/ezd-logger';
 import { TopicMeta } from '../../lib/models/topic-meta';
+// import { EventRegistry } from '../../lib/events/event-registry';
+import { EeRegistry as EventRegistry } from '../../lib/events/ee-registry';
 
 /*
 handle topic subscriptions and forward them to the handlers

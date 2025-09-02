@@ -5,6 +5,16 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [08/12/2025]
+
+I have been able to diagnose several issues that I had assumed were related to my asynchronous code or MQTT, and have discovered the issues almost all have to do with flakiness in devices or `zigbee2mqtt` and related drivers itself.
+
+1. Any messages sent to `Router` devices, in this case [Third Reality 3RSP02028BZ Plugs](https://www.zigbee2mqtt.io/devices/3RSP02028BZ.html#third%2520reality-3rsp02028bz), have a higher chance of failing in a way that causes a retry.
+    1. This includes, but is not limited to, the errors of type: `zh:ember:ezsp: Received network/route error ROUTE_ERROR_MANY_TO_ONE_ROUTE_FAILURE`
+    1. _Sometimes the retry is delayed by several minutes_ - this is extremely frustrating!
+1. If a `Router` switch fails _while it is routing a message from an end device_, like the Ikea remote, it will _sometimes_ re-send the signal from the remote again.
+    1. This causes cascading errors sometimes if the message modifies the switch state and the same switch is part of the route the message is traveling on.
+
 ## [08/02/2025]
 
 I adding a sqlite database. Why am I adding a sqlite database? I have either lost sight of the vision or never had one. Until I can answer the question, I will not worry about it.
