@@ -87,3 +87,17 @@ client.Subscribe(z2mDeviceTopic, 0, false, func (c mqtt.Client, m mqtt.Message) 
     client.Publish(z2mGetDeviceTopic, "{\"state\":\"\"}")
 })
 ```
+
+## Docker compose cmds
+
+up, rebuild:
+
+```sh
+docker compose up -d --build --no-deps --force-recreate mqtt
+```
+
+down:
+
+```sh
+docker compose down --rmi all --remove-orphans mqtt
+```
