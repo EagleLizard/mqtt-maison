@@ -2,7 +2,7 @@
 import 'dotenv/config';
 
 const mqtt_required_keys = [
-  'mqtt_server',
+  'mqtt_server_uri',
   'mqtt_user',
   'mqtt_password',
 ] as const;

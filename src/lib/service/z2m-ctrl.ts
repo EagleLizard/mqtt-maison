@@ -31,7 +31,7 @@ async function setBinaryState(
 
 async function waitForBinaryState(
   ctx: MqttCtx,
-  device: MaisonDevice,
+  device: MaisonDeviceDef,
   targetState: string,
   timeoutMs = SET_BIN_STATE_TIMEOUT_MS,
 ): Promise<void> {

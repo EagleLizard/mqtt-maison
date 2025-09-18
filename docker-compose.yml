@@ -1,0 +1,19 @@
+
+services:
+  mqtt:
+    container_name: mqtt_maison
+    restart: unless-stopped
+    build: .
+    stop_grace_period: 1s
+    environment:
+      - mqtt_server_uri=${mqtt_server_uri}
+      - mqtt_user=${mqtt_user}
+      - mqtt_password=${mqtt_password}
+      - ENVIRONMENT=${ENVIRONMENT}
+    volumes:
+      - ./logs_:/home/ezd/app/logs
+    logging:
+      driver: "local"
+      options:
+        max-size: 32m
+
