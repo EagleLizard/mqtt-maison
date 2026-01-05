@@ -10,6 +10,7 @@ const MaisonDeviceDefTSchema = Type.Object({
       e.g. brightness, color for lights
   */
   name: Type.String(), // friendly_name
+  groups: Type.Optional(Type.Array(Type.String())),
 });
 
 export type MaisonDeviceDef = Static<typeof MaisonDeviceDefTSchema>;

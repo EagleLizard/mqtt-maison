@@ -7,16 +7,6 @@ import { z2mCtrl } from '../../lib/service/z2m-ctrl';
 import { sleep } from '../../lib/util/sleep';
 import { MqttMsgEvt } from './msg-router';
 
-const action_main_device_names: string[] = [
-  'croc',
-  'rabbit',
-];
-const etc_light_device_names: string[] = [
-  'sengled_light_1',
-  'sengled_light_2',
-  'sengled_led_strip',
-];
-
 /*
 singleton for now
 _*/
@@ -39,10 +29,10 @@ export class MaisonCtrl {
   private constructor(opts: MaisonCtrlCtorOpts) {
     this.deviceDefs = opts.deviceDefs;
     this.actionMainDeviceDefs = this.deviceDefs.filter((device) => {
-      return action_main_device_names.includes(device.name);
+      return device.groups?.includes('action_main');
     });
     this.etcLightDeviceDefs = this.deviceDefs.filter((device) => {
-      return etc_light_device_names.includes(device.name);
+      return device.groups?.includes('etc_lights');
     });
     this.selectedDeviceIdx = 0;
     this.inProgressMap = {};

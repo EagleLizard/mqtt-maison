@@ -16,14 +16,21 @@ const maison_devices: MaisonDeviceDef[] = [
   },
   {
     name: 'rabbit',
+    groups: [ 'action_main' ]
   },
+  // {
+  //   name: 'sengled_light_2',
+  // },
   {
-    name: 'sengled_light_2',
+    name: 'plum',
+    groups: [ 'etc_lights' ],
   },
   {
     name: 'sengled_light_1',
+    groups: [ 'etc_lights' ],
   },
   {
+    /* broken? _*/
     name: 'sengled_led_strip',
   },
 ];
