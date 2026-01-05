@@ -5,18 +5,25 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/EagleLizard/mqtt-maison/src/lib/config"
 	"github.com/EagleLizard/mqtt-maison/src/lib/events"
+	ezdargs "github.com/EagleLizard/mqtt-maison/src/lib/ezd-args"
+	maisonaction "github.com/EagleLizard/mqtt-maison/src/lib/models/maison-action"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
+/* modified time.RFC3339Nano to match expected decimal precision in ms _*/
+const ISO8601_FORMAT = "2006-01-02T15:04:05.999Z07:00"
+
+/* TODO: make these configurable */
 const z2m_prefix = "zigbee2mqtt"
 const ikea_remote_name = "symfonisk_remote"
 const z2m_device_target = "croc"
 
 const maison_topic_prefix = "ezd"
-const maison_action_topic = "etc"
+const maison_action_topic = "rmt_ctrl"
 
 type MsgEvt struct {
 	Topic   string
@@ -28,8 +35,9 @@ type MqttCtx struct {
 	Logger *slog.Logger
 }
 
-func MqttEzdMain() {
+func MqttEzdMain(args ezdargs.EzdArgs) {
 	fmt.Printf("mqttezd main ~\n")
+	fmt.Printf("args.Rest: %v\n", args.Rest)
 
 	evtReg := events.NewEventRegistry[MsgEvt]()
 	off1 := evtReg.Register(func(evt MsgEvt) {
@@ -44,12 +52,11 @@ func MqttEzdMain() {
 	off2()
 	evtReg.Fire(MsgEvt{Topic: "topic3", Payload: []byte{}})
 	/*  */
-
+	/* if nothing is passed */
 	c := initClient()
 	if t := c.Connect(); t.Wait() && t.Error() != nil {
 		panic(t.Error())
 	}
-	ikeaMsgCh := make(chan MsgEvt)
 	ikeaDoneCh := make(chan struct{})
 	ctx := MqttCtx{
 		Client: c,
@@ -58,15 +65,7 @@ func MqttEzdMain() {
 	/* target device listener for debugging _*/
 	deviceTargetMsgCh := make(chan MsgEvt)
 	deviceTargetDoneCh := make(chan struct{})
-	go func() {
-		receivedCount := 0
-		for msg := range ikeaMsgCh {
-			fmt.Printf("action msg handler: topic: %s\n", msg.Topic)
-			ikeaMsgHandler(ctx, msg)
-			receivedCount++
-		}
-		ikeaDoneCh <- struct{}{}
-	}()
+
 	go func() {
 		for msg := range deviceTargetMsgCh {
 			/* This wont fire if unsubscribed elsewhere.. */
@@ -74,19 +73,49 @@ func MqttEzdMain() {
 		}
 		deviceTargetDoneCh <- struct{}{}
 	}()
-	maisonDoneCh := subMaisonActions(ctx, c)
+	maisonDoneCh := make(chan struct{})
+	// subMaisonActions(ctx, c, maisonDoneCh)
+	subIkeaRemote(ctx, c, ikeaDoneCh)
 	<-ikeaDoneCh
 	<-deviceTargetDoneCh
 	<-maisonDoneCh
 }
 
-type MaisonActionPayload struct {
+type IkeaRemotePayload struct {
 	Action string `json:"action"`
 }
 
-func subMaisonActions(ctx MqttCtx, client mqtt.Client) chan struct{} {
+type MaisonActionPayload struct {
+	Action string `json:"action"`
+	Dob    string `json:"dob"` // ISO 8691 string
+}
+
+/*
+Adapt messages from remote to our custom topic
+*/
+func subIkeaRemote(ctx MqttCtx, client mqtt.Client, doneCh chan struct{}) {
 	msgCh := make(chan MsgEvt)
-	doneCh := make(chan struct{})
+	ikeaTopic := z2m_prefix + "/" + ikea_remote_name
+	fn := func(c mqtt.Client, m mqtt.Message) {
+		msgCh <- MsgEvt{m.Topic(), m.Payload()}
+	}
+	t := client.Subscribe(ikeaTopic, 1, fn)
+	<-t.Done()
+	err := t.Error()
+	if err != nil {
+		panic(err)
+	}
+	go func() {
+		for msg := range msgCh {
+			ikeaMsgHandler(ctx, msg)
+		}
+		doneCh <- struct{}{}
+	}()
+}
+
+func subMaisonActions(ctx MqttCtx, client mqtt.Client, doneCh chan struct{}) {
+	msgCh := make(chan MsgEvt)
+	// doneCh := make(chan struct{})
 	maisonTopic := maison_topic_prefix + "/" + maison_action_topic
 	fn := func(c mqtt.Client, m mqtt.Message) {
 		msgCh <- MsgEvt{m.Topic(), m.Payload()}
@@ -110,37 +139,43 @@ func subMaisonActions(ctx MqttCtx, client mqtt.Client) chan struct{} {
 		}
 		doneCh <- struct{}{}
 	}()
-	return doneCh
+	// return doneCh
 }
 
 type Z2mBinaryState struct {
 	State string `json:"state"`
 }
 
-func ikeaMsgHandler(ctx MqttCtx, evt MsgEvt) {
-	payloadStr := string(evt.Payload)
-	if payloadStr == "toggle" {
-		currDeviceState := getBinaryState(ctx, z2m_device_target)
-		var stateVal string
-		switch currDeviceState.State {
-		case "ON":
-			stateVal = "OFF"
-		case "OFF":
-			stateVal = "ON"
-		default:
-			stateVal = "TOGGLE"
-		}
-		targetDevicePayload := Z2mBinaryState{
-			State: stateVal,
-		}
-		targetPayload, err := json.Marshal(targetDevicePayload)
-		if err != nil {
-			panic(err)
-		}
-		targetTopic := z2m_prefix + "/" + z2m_device_target + "/set"
-		fmt.Printf("targetTopic: %s\n", targetTopic)
-		fmt.Printf("targetPayload: %s\n", targetPayload)
-		ctx.Client.Publish(targetTopic, 0, false, targetPayload)
+func ikeaMsgHandler(ctx MqttCtx, msg MsgEvt) {
+	ikeaRemotePayload := IkeaRemotePayload{}
+	err := json.Unmarshal(msg.Payload, &ikeaRemotePayload)
+	if err != nil {
+		ctx.Logger.Error(msg.Topic, "error", err)
+	}
+	/* adapt to messages on our topic */
+
+	fmt.Printf("%s\n", ikeaRemotePayload.Action)
+	// ctx.Logger.Info("", slog.String("topic", msg.Topic), slog.String("payload", string(msg.Payload)))
+	mappedAction := maisonaction.GetMappedIkeaAction(ikeaRemotePayload.Action)
+	if len(mappedAction) < 1 {
+		ctx.Logger.Warn(fmt.Sprintf("No mapping for action: %s", ikeaRemotePayload.Action), slog.String("topic", msg.Topic))
+		return
+	}
+
+	dob := time.Now().Format("2006-01-02T15:04:05.999Z07:00")
+	maisonPayload := MaisonActionPayload{
+		Action: mappedAction,
+		Dob:    dob,
+	}
+	maisonPubMsg, err := json.Marshal(maisonPayload)
+	if err != nil {
+		panic(err)
+	}
+	pubTopic := maison_topic_prefix + "/" + maison_action_topic
+	t := ctx.Client.Publish(pubTopic, 0, false, maisonPubMsg)
+	<-t.Done()
+	if t.Error() != nil {
+		ctx.Logger.Error("", "err", t.Error())
 	}
 }
 
@@ -171,14 +206,16 @@ func initClient() mqtt.Client {
 	}
 	mqtt.ERROR = slog.NewLogLogger(slog.NewJSONHandler(os.Stdout, nil), slog.LevelError)
 	mqtt.CRITICAL = slog.NewLogLogger(slog.NewJSONHandler(os.Stdout, nil), slog.LevelError)
-	// mqtt.WARN = slog.NewLogLogger(slog.NewJSONHandler(os.Stdout, nil), slog.LevelWarn)
-	mqtt.DEBUG = slog.NewLogLogger(slog.NewJSONHandler(os.Stdout, nil), slog.LevelDebug)
+	mqtt.WARN = slog.NewLogLogger(slog.NewJSONHandler(os.Stdout, nil), slog.LevelWarn)
+	// mqtt.DEBUG = slog.NewLogLogger(slog.NewJSONHandler(os.Stdout, nil), slog.LevelDebug)
+	// mqtt.DEBUG = log.New(os.Stdout, "[DEBUG] ", 0)
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(cfg.Server)
 	opts.SetClientID("mqtt-maison-go")
 	opts.SetUsername(cfg.User)
 	opts.SetPassword(cfg.Password)
 	opts.SetOrderMatters(false)
+	fmt.Printf("%+v\n", opts)
 	c := mqtt.NewClient(opts)
 	return c
 }
