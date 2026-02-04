@@ -20,5 +20,5 @@ RUN npm ci
 RUN npm run build || true
 RUN npm ci --omit=dev
 
-CMD [ "node", "dist/main.js", "mqtt" ]
+CMD [ "npm", "start" ]
 
