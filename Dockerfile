@@ -13,6 +13,7 @@ WORKDIR ${HOME}/${APP_DIR}
 COPY package.json .
 COPY package-lock.json .
 COPY src/ src
+COPY db/ db
 COPY tsconfig.json .
 COPY eslint.config.mjs .
 RUN npm ci
