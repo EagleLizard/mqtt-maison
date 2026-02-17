@@ -13,10 +13,11 @@ const maison_action_topic = `${maison_topic_prefix}/${maison_action_topic_name}`
 const maison_devices: MaisonDeviceDef[] = [
   {
     name: 'croc',
+    groups: [ 'solar' ],
   },
   {
     name: 'rabbit',
-    groups: [ 'action_main' ]
+    groups: [ 'action_main', 'solar' ]
   },
   // {
   //   name: 'sengled_light_2',
@@ -38,6 +39,8 @@ const maison_devices: MaisonDeviceDef[] = [
 export const maisonConfig = {
   z2m_topic_prefix,
   ikea_remote_name,
+
   maison_action_topic,
+
   maison_devices,
 } as const;

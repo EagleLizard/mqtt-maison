@@ -10,6 +10,7 @@ import { Z2mDeviceService } from '../../lib/service/z2m-device-service';
 import { EventQueue } from '../../lib/events/event-queue';
 import { MaisonCtrl } from './maison-ctrl';
 import { mqttUtil } from '../../lib/service/mqtt-util';
+import { JobCtrl } from '../../lib/service/job-ctrl/job-ctrl';
 
 /*
   To accomplish the desired behavior, the problem is separate into 2 steps:
@@ -86,6 +87,9 @@ export async function mqttEzdMain() {
   });
   msgRouter.listen();
   logger.info('mqtt-ezd start');
+
+  /* background job configuration _*/
+  JobCtrl.run(ctx);
 }
 
 async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {

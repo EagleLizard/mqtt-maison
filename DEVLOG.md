@@ -5,6 +5,14 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [02/14/2026]
+
+### SQLite Background Jobs
+
+Initially looked into SideQuest.js, but found the API a bit verbose / complicated for what I'm trying to do.
+
+Following this article: SQLite Background Job System - https://jasongorman.uk/writing/sqlite-background-job-system/ for an example of something light weight and reasonably asynchronous.
+
 ## [08/12/2025]
 
 I have been able to diagnose several issues that I had assumed were related to my asynchronous code or MQTT, and have discovered the issues almost all have to do with flakiness in devices or `zigbee2mqtt` and related drivers itself.

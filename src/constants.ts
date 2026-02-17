@@ -25,4 +25,7 @@ export const CONFIG_DIR_PATH = [
   CONFIG_DIR_NAME,
 ].join(path.sep);
 
+const DB_DIR_NAME = 'db';
+export const DB_DIR_PATH = [ BASE_DIR, DB_DIR_NAME ].join(path.sep);
+
 export const MAISON_DEVICES_DEF_FILE_NAME = 'devices.json';
