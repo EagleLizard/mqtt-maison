@@ -12,6 +12,7 @@ services:
       - ENVIRONMENT=${ENVIRONMENT}
     volumes:
       - ./logs_:/home/ezd/app/logs
+      - ./data:/home/ezd/app/data
     logging:
       driver: "local"
       options:
