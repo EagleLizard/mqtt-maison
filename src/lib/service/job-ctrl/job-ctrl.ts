@@ -73,10 +73,6 @@ function checkDailyJobs() {
   today.setHours(0, 0, 0, 0);
   let tomorrow = new Date(today.valueOf());
   tomorrow.setDate(today.getDate() + 1);
-  sqlClient.run(`
-    delete from jobs
-      where job_type = 'daily'
-  `);
   let todaysJob = sqlClient.get(`
     select * from jobs j
       where j.job_type = 'daily'
