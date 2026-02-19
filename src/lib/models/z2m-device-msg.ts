@@ -5,10 +5,8 @@ import { TransformDecodeCheckError, Value } from '@sinclair/typebox/value';
 const Z2mDeviceMsgTSchema = Type.Object({
   state: Type.String(),
 });
-
 export type Z2mDeviceMsg = Static<typeof Z2mDeviceMsgTSchema>;
-
-export const Z2mDeviceMsgSchema = {
+export const Z2mDeviceMsg = {
   parse: z2mDeviceMsgParse,
 } as const;
 

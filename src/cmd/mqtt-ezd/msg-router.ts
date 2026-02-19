@@ -3,6 +3,7 @@ import { EzdLogger } from '../../lib/logger/ezd-logger';
 import { TopicMeta } from '../../lib/models/topic-meta';
 // import { EventRegistry } from '../../lib/events/event-registry';
 import { EeRegistry as EventRegistry } from '../../lib/events/ee-registry';
+import { EzdError } from '../../lib/models/error/ezd-error';
 
 /*
 handle topic subscriptions and forward them to the handlers
@@ -67,7 +68,7 @@ export class MsgRouter {
     }
     if(onMsgCb === undefined) {
       /* this should be unreachable */
-      throw new Error('Invalid, no onMsgCb passed');
+      throw new EzdError('Invalid, no onMsgCb passed', 'MSGR_0.1');
     }
     topicEvtReg = this.topicEventMap.get(topic);
     if(topicEvtReg === undefined) {
@@ -116,7 +117,7 @@ export class MsgRouter {
     return this.client.publishAsync(topic, message, pubOpts);
   }
 
-  /* returns function to unlisted */
+  /* returns function to unlisten */
   listen(): OffCb {
     let listenerCount: number;
     listenerCount = this.client.listenerCount('message', this.handleMessage);
@@ -200,9 +201,9 @@ export class MsgRouter {
   /*
   TODO: overload to take the same params as mqtt.Client.connect
   _*/
-  static init(client: mqtt.MqttClient, logger: EzdLogger): Promise<MsgRouter> {
+  static init(client: mqtt.MqttClient, logger: EzdLogger): MsgRouter {
     let msgRouter: MsgRouter;
     msgRouter = new MsgRouter(client, logger);
-    return Promise.resolve(msgRouter);
+    return msgRouter;
   }
 }

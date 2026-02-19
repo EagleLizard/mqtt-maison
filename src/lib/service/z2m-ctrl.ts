@@ -5,7 +5,7 @@ import { maisonConfig } from '../config/maison-config';
 import { mqttUtil } from './mqtt-util';
 import { prim } from '../util/validate-primitives';
 import { MaisonDeviceDef } from '../models/maison-device';
-import { Z2mDeviceMsg, Z2mDeviceMsgSchema } from '../models/z2m-device-msg';
+import { Z2mDeviceMsg } from '../models/z2m-device-msg';
 import { sleep } from '../util/sleep';
 
 const SET_BIN_STATE_TIMEOUT_MS = 10e3;
@@ -35,30 +35,25 @@ async function waitForBinaryState(
   targetState: string,
   timeoutMs = SET_BIN_STATE_TIMEOUT_MS,
 ): Promise<void> {
-  let msgEvt: MqttMsgEvt;
-  let payload: unknown;
-  let z2mMsg: Z2mDeviceMsg;
   let currMsgEvt: MqttMsgEvt;
-  let pollStartMs: number;
   if(targetState !== 'ON' && targetState !== 'OFF') {
     throw new Error(`Invalid state string '${targetState}'`);
   }
-  msgEvt = await ctx.z2mDeviceService.getStateMsgEvt(device);
-  payload = mqttUtil.parsePayload(msgEvt.payload);
-  z2mMsg = Z2mDeviceMsgSchema.parse(payload);
-  pollStartMs = Date.now();
+  let msgEvt = await ctx.z2mDeviceService.getStateMsgEvt(device);
+  let payload = mqttUtil.parsePayload(msgEvt.payload);
+  let z2mMsg = Z2mDeviceMsg.parse(payload);
+  let pollStartMs = Date.now();
   while(z2mMsg.state !== targetState) {
     await sleep(100);
-    let hasNewMsg: boolean;
-    let elapsedMs: number;
+    // await sleep(10);
     currMsgEvt = await ctx.z2mDeviceService.getStateMsgEvt(device);
-    hasNewMsg = currMsgEvt !== msgEvt;
+    let hasNewMsg = currMsgEvt !== msgEvt;
     if(hasNewMsg) {
       msgEvt = currMsgEvt;
       payload = mqttUtil.parsePayload(msgEvt.payload);
-      z2mMsg = Z2mDeviceMsgSchema.parse(payload);
+      z2mMsg = Z2mDeviceMsg.parse(payload);
     }
-    elapsedMs = Date.now() - pollStartMs;
+    let elapsedMs = Date.now() - pollStartMs;
     if(elapsedMs > timeoutMs) {
       throw new Error(`Timeout of ${timeoutMs}ms exceeded`);
     }

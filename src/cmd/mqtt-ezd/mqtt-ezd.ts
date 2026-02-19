@@ -23,23 +23,16 @@ import { JobCtrl } from '../../lib/service/job-ctrl/job-ctrl';
       This is where modal state would be considered
 _*/
 export async function mqttEzdMain() {
-  let client: mqtt.MqttClient;
-  let ikeaTopic: string;
-  let maisonTopic: string;
-  let msgRouter: MsgRouter;
-  let z2mDeviceService: Z2mDeviceService;
-  let ctx: MqttCtx;
-  let maisonEvtQueue: EventQueue<MqttMsgEvt>;
   console.log('mqtt-ezd main ~');
-  ikeaTopic = `${maisonConfig.z2m_topic_prefix}/${maisonConfig.ikea_remote_name}/action`;
-  maisonTopic = maisonConfig.maison_action_topic;
-  client = await mqttUtil.initClient();
-  msgRouter = await MsgRouter.init(client, logger);
-  z2mDeviceService = await Z2mDeviceService.init({
+  let ikeaTopic = `${maisonConfig.z2m_topic_prefix}/${maisonConfig.ikea_remote_name}/action`;
+  let maisonTopic = maisonConfig.maison_action_topic;
+  let client = await mqttUtil.initClient();
+  let msgRouter = MsgRouter.init(client, logger);
+  let z2mDeviceService = await Z2mDeviceService.init({
     devices: maisonConfig.maison_devices,
     msgRouter: msgRouter,
   });
-  ctx = {
+  let ctx = {
     client,
     logger,
     msgRouter,
@@ -61,7 +54,7 @@ export async function mqttEzdMain() {
   let maisonCtrl = await MaisonCtrl.init({
     deviceDefs: maisonConfig.maison_devices,
   });
-  maisonEvtQueue = EventQueue.init((evt, doneCb) => {
+  let maisonEvtQueue = EventQueue.init<MqttMsgEvt>((evt, doneCb) => {
     maisonCtrl.handleMsg(ctx, evt).catch(err => {
       doneCb(err);
     }).finally(() => {
@@ -94,8 +87,7 @@ export async function mqttEzdMain() {
 
 async function ikeaMsgHandler(ctx: MqttCtx, evt: MqttMsgEvt) {
   let payloadStr = evt.payload.toString();
-  let mappedAction: MaisonAction | undefined;
-  mappedAction = maison_actions.ikea_action_map.get(payloadStr);
+  let mappedAction = maison_actions.ikea_action_map.get(payloadStr);
   if(mappedAction === undefined) {
     ctx.logger.warn({
       topic: evt.topic,
