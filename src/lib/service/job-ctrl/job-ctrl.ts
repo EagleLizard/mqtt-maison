@@ -205,8 +205,14 @@ async function doDailyJob(ctx: MqttCtx, job: MnJob) {
   d.setHours(0, 0, 0, 0);
   let d2 = new Date(d.valueOf());
   d2.setDate(d.getDate() + 1);
-  queueSunup(now);
-  queueSundown(now);
+
+  let sunupD = new Date(now.valueOf());
+  sunupD.setHours(4, 0, 0, 0);
+  queueSunup(sunupD);
+  let sundownD = new Date(now.valueOf());
+  sundownD.setHours(12, 0, 0, 0);
+  queueSundown(sundownD);
+
   /* --- _*/
   let d3 = new Date(d2.valueOf());
   d3.setDate(d2.getDate() + 1);
@@ -286,8 +292,15 @@ async function doSunupJob(ctx: MqttCtx, job: MnJob) {
     return z2mCtrl.setBinaryState(ctx, device, 'OFF');
   }));
   /* queue next _*/
-  let d = new Date();
+  let d = new Date(job.run_at);
   d.setDate(d.getDate() + 1);
+  /*
+    set to 4am because suncalc returns wrong results for some times of day
+      https://github.com/mourner/suncalc/issues/161#issuecomment-2054134528
+    At the time of writing this, the lowest value for setHours is:
+      d.setHours(1, 0, 0, 0);
+  _*/
+  d.setHours(4, 0, 0, 0);
   queueSunup(d);
 }
 
@@ -297,8 +310,15 @@ async function doSundownJob(ctx: MqttCtx, job: MnJob) {
   });
   await Promise.all(devicePromises);
   /* queue next */
-  let d = new Date();
+  let d = new Date(job.run_at);
   d.setDate(d.getDate() + 1);
+  /*
+    set to noon because suncalc returns wrong results for some times of day
+      https://github.com/mourner/suncalc/issues/161#issuecomment-2054134528
+    At the time of writing this, the lowest value for setHours is:
+      d.setHours(1, 0, 0, 0);
+  _*/
+  d.setHours(12, 0, 0, 0);
   queueSundown(d);
 }
 
