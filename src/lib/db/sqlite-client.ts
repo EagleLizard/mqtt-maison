@@ -18,8 +18,26 @@ const default_sqlite_client_init_opts: Required<SqliteClientInitOpts> = {
   fileMustExist: true,
 };
 
-export class SqliteClient {
-  _db: BSqlite3.Database;
+export type ISqliteClient = {
+  transaction: {
+    <Fn extends (...params: unknown[]) => void>(fn: Fn): Transaction<Fn>;
+  };
+  all: {
+    <T extends unknown[], R = unknown>(source: string, ...params: T): R[] | undefined;
+  };
+  get: {
+    <T extends unknown[], R = unknown>(source: string, ...params: T): R | undefined;
+  };
+  run: {
+    <T extends unknown[]>(source: string, ...params: T): RunResult;
+  };
+  exec: {
+    (source: string): void;
+  };
+};
+
+export class SqliteClient implements ISqliteClient {
+  private _db: BSqlite3.Database;
   private constructor(
     db: BSqlite3.Database
   ) {

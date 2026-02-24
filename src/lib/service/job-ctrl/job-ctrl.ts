@@ -12,6 +12,7 @@ import { solar } from '../../util/solar';
 import { MqttCtx } from '../../models/mqtt-ctx';
 import { maisonConfig } from '../../config/maison-config';
 import { z2mCtrl } from '../z2m-ctrl';
+import { JobRepo } from '../../db/jobs-db/job-repo';
 
 /*
   Simple job scheduler
@@ -33,6 +34,7 @@ const sunDevices = maisonConfig.maison_devices.filter(device => {
 });
 
 let sqlClient: SqliteClient;
+let jobRepo: JobRepo;
 
 (function _init() {
   /*
@@ -44,11 +46,14 @@ let sqlClient: SqliteClient;
   });
   let initScriptData = fs.readFileSync(jobs_db_init_script_path);
   sqlClient.exec(initScriptData.toString());
+
+  jobRepo = JobRepo.init({
+    sqlClient: sqlClient,
+  });
 })();
 
 export const JobCtrl = {
   run: run,
-  enqueue: enqueue,
 } as const;
 
 function run(ctx: MqttCtx) {
@@ -61,7 +66,7 @@ function run(ctx: MqttCtx) {
     }, 500);
   })();
   async function _run() {
-    let job = dequeue();
+    let job = jobRepo.dequeue();
     if(job !== undefined) {
       await execJob(ctx, job);
     }
@@ -70,97 +75,20 @@ function run(ctx: MqttCtx) {
 
 function checkDailyJobs() {
   let today = new Date();
-  today.setHours(0, 0, 0, 0);
-  let tomorrow = new Date(today.valueOf());
-  tomorrow.setDate(today.getDate() + 1);
-  let todaysJob = sqlClient.get(`
-    select * from jobs j
-      where j.job_type = 'daily'
-        and j.run_at >= ?
-        and j.run_at < ?
-      limit 1
-  `, [
-    today.toISOString(),
-    tomorrow.toISOString(),
-  ]);
+  today.setHours(0,0,0,0);
+  let todaysJob = jobRepo.getOnceDailyJob(today);
   if(todaysJob === undefined) {
     logger.warn('no daily job found for today');
-    JobCtrl.enqueue('daily', today);
+    jobRepo.enqueue('daily', today);
   }
-}
-
-function enqueue(jobType = 'test', runAt = new Date()) {
-  sqlClient.run(`
-    insert into jobs (job_type, run_at) values (@jobType, @runAt)
-  `, {
-    jobType: jobType,
-    runAt: runAt.toISOString(),
-  });
-}
-
-function dequeue() {
-  let txnFn = sqlClient.transaction(() => {
-    let rawJob = sqlClient.get(`
-      select * from jobs j
-        where j.status = 'pending'
-        and run_at <= @timestamp
-      order by j.run_at
-      limit 1
-    `, {
-      timestamp: (new Date()).toISOString()
-    });
-    if(rawJob === undefined) {
-      return;
-    }
-    let job = MnJob.decode(rawJob);
-    let updateRes = sqlClient.run(`
-      update jobs
-          set status = 'in_progress',
-            modified_at = CURRENT_TIMESTAMP
-        where id = @jobId
-          and status = 'pending'
-    `, {
-      jobId: job.id
-    });
-    if(updateRes.changes !== 1) {
-      throw new EzdError(`error updating job ${job.id}`, 'JB_0.1');
-    }
-    return job;
-  });
-  let job: MnJob | undefined;
-  try {
-    job = txnFn();
-  } catch(e) {
-    if(!(e instanceof EzdError) || e.code !== 'JB_0.1') {
-      throw e;
-    }
-    console.error(e);
-  }
-  return job;
 }
 
 function completeJob(job: MnJob) {
-  sqlClient.run(`
-    update jobs
-      set status = 'done',
-        modified_at = CURRENT_TIMESTAMP
-    where id = @jobId
-      and status = 'in_progress'
-  `, {
-    jobId: job.id,
-  });
+  jobRepo.completeJob(job);
   logger.info(`Completed '${job.job_type}' job ${job.id}`);
 }
 function failJob(job: MnJob, reason: string, code: string) {
-  sqlClient.run(`
-    update jobs
-      set status = 'failed',
-        modified_at = CURRENT_TIMESTAMP
-    where id = @jobId
-      -- and status = 'in_progress'
-  `, {
-    jobId: job.id,
-  });
+  jobRepo.failJob(job);
   logger.error(new EzdError(reason, code));
 }
 
@@ -214,20 +142,9 @@ async function doDailyJob(ctx: MqttCtx, job: MnJob) {
   queueSundown(sundownD);
 
   /* --- _*/
-  let d3 = new Date(d2.valueOf());
-  d3.setDate(d2.getDate() + 1);
-  let rawNextDailyJob = sqlClient.get(`
-    select * from jobs j
-      where j.job_type = 'daily'
-        and j.run_at >= ?
-        and j.run_at <= ?
-    limit 1
-  `, [
-    d2.toISOString(),
-    d3.toISOString(),
-  ]);
-  if(rawNextDailyJob === undefined) {
-    JobCtrl.enqueue('daily', d2);
+  let nextDailyJob = jobRepo.getOnceDailyJob(d2);
+  if(nextDailyJob === undefined) {
+    jobRepo.enqueue('daily', d2);
   }
 }
 function queueSunup(d: Date) {
@@ -238,25 +155,11 @@ function queueSunup(d: Date) {
     d = d2;
     sunupTs = solar.getSunup(d2);
   }
-  let dMin = new Date(d.valueOf());
-  dMin.setHours(0, 0, 0, 0);
-  let dMax = new Date(dMin.valueOf());
-  dMax.setDate(dMin.getDate() + 1);
-  let rawSunupJob = sqlClient.get(`
-    select * from jobs j
-      where j.job_type = 'sunup'
-       and j.run_at > ?
-       and j.run_at < ?
-      order by j.run_at
-    limit 1
-  `, [
-    dMin.toISOString(),
-    dMax.toISOString(),
-  ]);
-  if(rawSunupJob !== undefined) {
+  let sunupJob = jobRepo.getSunupJob(d);
+  if(sunupJob !== undefined) {
     return;
   }
-  JobCtrl.enqueue('sunup', sunupTs);
+  jobRepo.enqueue('sunup', sunupTs);
 }
 function queueSundown(d: Date) {
   let sundownTs = solar.getSundown(d);
@@ -266,25 +169,11 @@ function queueSundown(d: Date) {
     d = d2;
     sundownTs = solar.getSundown(d2);
   }
-  let dMin = new Date(d.valueOf());
-  dMin.setHours(0, 0, 0, 0);
-  let dMax = new Date(dMin.valueOf());
-  dMax.setDate(dMin.getDate() + 1);
-  let rawSundownJob = sqlClient.get(`
-    select * from jobs j
-      where j.job_type = 'sundown'
-        and j.run_at > ?
-        and j.run_at < ?
-      order by j.run_at
-    limit 1
-  `, [
-    dMin.toISOString(),
-    dMax.toISOString(),
-  ]);
-  if(rawSundownJob !== undefined) {
+  let sundownJob = jobRepo.getSundownJob(d);
+  if(sundownJob !== undefined) {
     return;
   }
-  JobCtrl.enqueue('sundown', sundownTs);
+  jobRepo.enqueue('sundown', sundownTs);
 }
 
 async function doSunupJob(ctx: MqttCtx, job: MnJob) {
@@ -325,7 +214,7 @@ async function doSundownJob(ctx: MqttCtx, job: MnJob) {
 async function doTestJob(ctx: MqttCtx, job: MnJob) {
   await sleep(500);
   // logger.info(`Completed '${job.job_type}' job ${job.id}`);
-  enqueue('test', new Date(Date.now() + 10_000));
+  jobRepo.enqueue('test', new Date(Date.now() + 10_000));
   let devicePromises: Promise<void>[] = [];
   for(let i = 0; i < sunDevices.length; i++) {
     let device = sunDevices[i];

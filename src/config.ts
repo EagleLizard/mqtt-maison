@@ -1,5 +1,6 @@
 
 import 'dotenv/config';
+import { prim } from './lib/util/validate-primitives';
 
 const mqtt_required_keys = [
   'mqtt_server_uri',
@@ -12,6 +13,11 @@ type MqttConfig = Record<MqttConfigKey, string> & {};
 const DEV_ENV_STR = 'dev';
 
 export const ezdConfig = {
+  solar: {
+    latitude: getNumberEnvVar('sun_latitude'),
+    longitude: getNumberEnvVar('sun_longitude'),
+    elevation_ft: getNumberEnvVar('sun_elevation_ft'),
+  },
   getMqttConfig,
   isDevEnv: isDevEnv,
   getEnvironment,
@@ -42,4 +48,24 @@ function getMqttConfig(): MqttConfig {
     throw new Error(`MQTT - Missing required key: ${missingKeys.join(', ')}`);
   }
   return cfg as MqttConfig;
+}
+
+function getNumberEnvVar(envKey: string): number {
+  let rawPort: string;
+  let portNum: number;
+  rawPort = getEnvVarOrErr(envKey);
+  portNum = +rawPort;
+  if(isNaN(portNum)) {
+    throw new Error(`invalid env var ${envKey}, expected 'number'`);
+  }
+  return portNum;
+}
+
+function getEnvVarOrErr(envKey: string): string {
+  let rawEnvVar: string | undefined;
+  rawEnvVar = process.env[envKey];
+  if(!prim.isString(rawEnvVar)) {
+    throw new Error(`Invalid ${envKey}`);
+  }
+  return rawEnvVar;
 }
