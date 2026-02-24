@@ -10,6 +10,9 @@ services:
       - mqtt_user=${mqtt_user}
       - mqtt_password=${mqtt_password}
       - ENVIRONMENT=${ENVIRONMENT}
+      - sun_latitude=${sun_latitude}
+      - sun_longitude=${sun_longitude}
+      - sun_elevation_ft=${sun_elevation_ft}
     volumes:
       - ./logs_:/home/ezd/app/logs
       - ./data:/home/ezd/app/data
