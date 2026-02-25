@@ -4,6 +4,7 @@ FROM node:24-alpine AS base
 ENV USER=ezd
 ENV HOME=/home/$USER
 ENV APP_DIR=app
+ENV TZ="America/Denver"
 
 RUN adduser -S ezd -G node
 RUN mkdir -p ${HOME}/${APP_DIR}/node_modules
