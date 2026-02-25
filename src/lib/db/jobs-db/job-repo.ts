@@ -1,3 +1,4 @@
+
 import { EzdError } from '../../models/error/ezd-error';
 import { MnJob } from '../../models/jobs/mn-job';
 import { ISqliteClient } from '../sqlite-client';
@@ -10,6 +11,10 @@ export const JobRepo = {
 type InitJobRepoOpts = {
   sqlClient: ISqliteClient;
 } & {};
+type GetDailyJobOpts = {
+  pending?: boolean;
+} & {};
+
 function initJobRepo(opts: InitJobRepoOpts) {
   const sqlClient = opts.sqlClient;
 
@@ -54,26 +59,42 @@ function initJobRepo(opts: InitJobRepoOpts) {
   }
 
   function getSunupJob(d: Date): MnJob | undefined {
-    return _getDailyJob(d, 'sunup');
+    return _getDailyJob(d, 'sunup', {
+      pending: true,
+    });
   }
 
   function getSundownJob(d: Date): MnJob | undefined {
-    return _getDailyJob(d, 'sundown');
+    return _getDailyJob(d, 'sundown', {
+      pending: true,
+    });
   }
 
-  function _getDailyJob(d: Date, jobType: string): MnJob | undefined {
+  function _getDailyJob(
+    d: Date,
+    jobType: string,
+    opts: GetDailyJobOpts = { pending: false },
+  ): MnJob | undefined {
     let dMin = new Date(d.valueOf());
     dMin.setHours(0, 0, 0, 0);
     let dMax = new Date(dMin.valueOf());
     dMax.setDate(dMin.getDate() + 1);
-    let rawJob = sqlClient.get(`
+    let queryStr = `
       select * from jobs j
         where j.job_type = ?
           and j.run_at >= ?
           and j.run_at < ?
+    `;
+    if(opts.pending) {
+      queryStr = `${queryStr}
+          and j.status = 'pending'
+      `;
+    }
+    queryStr = `${queryStr}
         order by j.run_at
-      limit 1
-    `, [
+      limit 1;
+    `;
+    let rawJob = sqlClient.get(queryStr, [
       jobType,
       dMin.toISOString(),
       dMax.toISOString(),
@@ -85,13 +106,16 @@ function initJobRepo(opts: InitJobRepoOpts) {
     return job;
   }
 
-  function enqueue(jobType: string, runAt = new Date()) {
-    sqlClient.run(`
+  function enqueue(jobType: string, runAt = new Date()): MnJob {
+    let rawJob = sqlClient.get(`
       insert into jobs (job_type, run_at) values (@jobType, @runAt)
+      returning *
     `, {
       jobType: jobType,
       runAt: runAt.toISOString(),
     });
+    let job = MnJob.decode(rawJob);
+    return job;
   }
 
   function dequeue(): MnJob | undefined {

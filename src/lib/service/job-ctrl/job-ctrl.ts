@@ -4,15 +4,15 @@ import path from 'node:path';
 
 import { DB_DIR_PATH, DATA_DIR_PATH } from '../../../constants';
 import { SqliteClient } from '../../db/sqlite-client';
-import { sleep } from '../../util/sleep';
 import { EzdError } from '../../models/error/ezd-error';
 import { MnJob } from '../../models/jobs/mn-job';
 import { logger } from '../../logger/logger';
-import { solar } from '../../util/solar';
+import { sol } from '../../util/sol';
 import { MqttCtx } from '../../models/mqtt-ctx';
 import { maisonConfig } from '../../config/maison-config';
 import { z2mCtrl } from '../z2m-ctrl';
 import { JobRepo } from '../../db/jobs-db/job-repo';
+import { dtUtil } from '../../util/dt-util';
 
 /*
   Simple job scheduler
@@ -54,7 +54,12 @@ let jobRepo: JobRepo;
 
 export const JobCtrl = {
   run: run,
+  enqueue: enqueue
 } as const;
+
+function enqueue(jobType: string, runAt = new Date()): MnJob {
+  return jobRepo.enqueue(jobType, runAt);
+}
 
 function run(ctx: MqttCtx) {
   checkDailyJobs();
@@ -79,7 +84,7 @@ function checkDailyJobs() {
   let todaysJob = jobRepo.getOnceDailyJob(today);
   if(todaysJob === undefined) {
     logger.warn('no daily job found for today');
-    jobRepo.enqueue('daily', today);
+    JobCtrl.enqueue('daily', today);
   }
 }
 
@@ -128,51 +133,46 @@ async function doJob(ctx: MqttCtx, job: MnJob) {
 }
 
 async function doDailyJob(ctx: MqttCtx, job: MnJob) {
-  let now = new Date;
-  let d = new Date(now.valueOf());
-  d.setHours(0, 0, 0, 0);
-  let d2 = new Date(d.valueOf());
-  d2.setDate(d.getDate() + 1);
+  let now = new Date();
+  initSunJobs(now);
 
-  let sunupD = new Date(now.valueOf());
-  sunupD.setHours(4, 0, 0, 0);
-  queueSunup(sunupD);
-  let sundownD = new Date(now.valueOf());
-  sundownD.setHours(12, 0, 0, 0);
-  queueSundown(sundownD);
+  /* todo: remove */
+  // sqlClient.run(`
+  //   delete from jobs
+  //     where id = ?
+  // `, [ job.id ]);
+}
 
-  /* --- _*/
-  let nextDailyJob = jobRepo.getOnceDailyJob(d2);
-  if(nextDailyJob === undefined) {
-    jobRepo.enqueue('daily', d2);
+function initSunJobs(d = new Date()) {
+  let sunup = sol.getSunup(d);
+  if(d <= sunup) {
+    queueSunup(d);
+    return;
+  }
+  // sunup in the past
+  let sundown = sol.getSundown(d);
+  if(d <= sundown) {
+    queueSundown(d);
+    return;
   }
 }
+
 function queueSunup(d: Date) {
-  let sunupTs = solar.getSunup(d);
-  if(sunupTs < d) {
-    let d2 = new Date(d.valueOf());
-    d2.setDate(d.getDate() + 1);
-    d = d2;
-    sunupTs = solar.getSunup(d2);
-  }
   let sunupJob = jobRepo.getSunupJob(d);
   if(sunupJob !== undefined) {
     return;
   }
+  let sunupTs = sol.getSunup(d);
+  logger.info(`queueing sunup job for ${dtUtil.tzIso(sunupTs)}`);
   jobRepo.enqueue('sunup', sunupTs);
 }
 function queueSundown(d: Date) {
-  let sundownTs = solar.getSundown(d);
-  if(sundownTs < d) {
-    let d2 = new Date(d.valueOf());
-    d2.setDate(d.getDate() + 1);
-    d = d2;
-    sundownTs = solar.getSundown(d2);
-  }
   let sundownJob = jobRepo.getSundownJob(d);
   if(sundownJob !== undefined) {
     return;
   }
+  let sundownTs = sol.getSundown(d);
+  logger.info(`queueing sundown job for ${dtUtil.tzIso(sundownTs)}`);
   jobRepo.enqueue('sundown', sundownTs);
 }
 
@@ -181,16 +181,7 @@ async function doSunupJob(ctx: MqttCtx, job: MnJob) {
     return z2mCtrl.setBinaryState(ctx, device, 'OFF');
   }));
   /* queue next _*/
-  let d = new Date(job.run_at);
-  d.setDate(d.getDate() + 1);
-  /*
-    set to 4am because suncalc returns wrong results for some times of day
-      https://github.com/mourner/suncalc/issues/161#issuecomment-2054134528
-    At the time of writing this, the lowest value for setHours is:
-      d.setHours(1, 0, 0, 0);
-  _*/
-  d.setHours(4, 0, 0, 0);
-  queueSunup(d);
+  queueSundown(new Date());
 }
 
 async function doSundownJob(ctx: MqttCtx, job: MnJob) {
@@ -199,31 +190,24 @@ async function doSundownJob(ctx: MqttCtx, job: MnJob) {
   });
   await Promise.all(devicePromises);
   /* queue next */
-  let d = new Date(job.run_at);
+  let d = new Date();
   d.setDate(d.getDate() + 1);
-  /*
-    set to noon because suncalc returns wrong results for some times of day
-      https://github.com/mourner/suncalc/issues/161#issuecomment-2054134528
-    At the time of writing this, the lowest value for setHours is:
-      d.setHours(1, 0, 0, 0);
-  _*/
-  d.setHours(12, 0, 0, 0);
-  queueSundown(d);
+  queueSunup(d);
 }
 
 async function doTestJob(ctx: MqttCtx, job: MnJob) {
-  await sleep(500);
-  // logger.info(`Completed '${job.job_type}' job ${job.id}`);
-  jobRepo.enqueue('test', new Date(Date.now() + 10_000));
+  const testDevices = maisonConfig.maison_devices.filter(device => {
+    return device.name === 'plum';
+  });
+  JobCtrl.enqueue('test', new Date(Date.now() + 2_000));
   let devicePromises: Promise<void>[] = [];
-  for(let i = 0; i < sunDevices.length; i++) {
-    let device = sunDevices[i];
+  for(let i = 0; i < testDevices.length; i++) {
+    let device = testDevices[i];
     let p = z2mCtrl.getBinaryState(ctx, device).then(state => {
-      if(state === 'ON') {
-        return z2mCtrl.setBinaryState(ctx, device, 'OFF');
-      } else {
-        return z2mCtrl.setBinaryState(ctx, device, 'ON');
-      }
+      let targetState = state === 'ON' ? 'OFF' : 'ON';
+      return z2mCtrl.setBinaryState(ctx, device, targetState).then(() => {
+        return z2mCtrl.waitForBinaryState(ctx, device, targetState);
+      });
     });
     devicePromises.push(p);
   }
