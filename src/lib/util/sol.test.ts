@@ -21,8 +21,6 @@ describe('sol', () => {
 
   test('.getSunup() returns same day for 12 AM', () => {
     let sunup = sol.getSunup(d);
-    console.log(dtUtil.tzIso(d));
-    console.log(dtUtil.tzIso(sunup));
     expect(sunup.getDate()).toBe(d.getDate());
   });
   test('.getSunup() returns same day for 11:59:59 PM', () => {
@@ -41,15 +39,11 @@ describe('sol', () => {
   });
   test('.getSundown() returns same day for 12 AM', () => {
     let sundown = sol.getSundown(d);
-    console.log(dtUtil.tzIso(d));
-    console.log(dtUtil.tzIso(sundown));
     expect(sundown.getDate()).toBe(d.getDate());
   });
   test('.getSundown() returns same day for 11:59:59 PM', () => {
     d.setHours(23, 59, 59);
     let sundown = sol.getSundown(d);
-    console.log(dtUtil.tzIso(d));
-    console.log(dtUtil.tzIso(sundown));
     expect(sundown.getDate()).toBe(d.getDate());
   });
   test(`.getSundown() returns same day for the next ${years_to_test} years`, () => {

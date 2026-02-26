@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, Mocked, test, vi } from 'vitest';
 import { MqttMsgEvt, MsgRouter } from './msg-router';
 import pino from 'pino';
 import assert from 'node:assert';
+import { mqttClientMock } from '../../lib/util/test/mqtt-client-mock';
 
 describe('msg-router', () => {
   let mockClient: Mocked<mqtt.MqttClient>;
@@ -114,7 +115,7 @@ describe('msg-router', () => {
       val: 'mock_val',
     } as const;
     let payloadBuf = Buffer.from(JSON.stringify(payloadMock));
-    let packetMock = getMockPubPacket(topicMock, payloadBuf);
+    let packetMock = mqttClientMock.getMockPubPacket(topicMock, payloadBuf);
     messageHandlerFn(topicMock, payloadBuf, packetMock);
     expect(subCb).toBeCalledWith({
       topic: topicMock,
@@ -149,7 +150,7 @@ describe('msg-router', () => {
       val: 'mock_val',
     } as const;
     let payloadBuf = Buffer.from(JSON.stringify(payloadMock));
-    let packetMock = getMockPubPacket(topicMock, payloadBuf);
+    let packetMock = mqttClientMock.getMockPubPacket(topicMock, payloadBuf);
     subOffCb();
     messageHandlerFn(topicMock, payloadBuf, packetMock);
     expect(subCb).toHaveBeenCalledTimes(0);
@@ -166,18 +167,3 @@ describe('msg-router', () => {
     expect(mockClient.publishAsync).toHaveBeenCalledWith(topicMock, pubMsgMock, pubOpts);
   });
 });
-
-/*
-  details of this are fuzzy since this program doesn't utilized packet info
-_*/
-function getMockPubPacket(topic: string, payload: Buffer): mqtt.IPublishPacket {
-  return {
-    cmd: 'publish',
-    retain: false,
-    qos: 1,
-    dup: false,
-    length: 65,
-    payload,
-    topic,
-  };
-}
