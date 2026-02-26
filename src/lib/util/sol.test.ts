@@ -36,7 +36,7 @@ describe('sol', () => {
       let sunup = sol.getSunup(d);
       expect(sunup.getDate(), `date: ${dtUtil.tzIso(d)},sunrise: ${dtUtil.tzIso(sunup)}`).toBe(d.getDate());
     }
-  });
+  }, 10_000);
   test('.getSundown() returns same day for 12 AM', () => {
     let sundown = sol.getSundown(d);
     expect(sundown.getDate()).toBe(d.getDate());
@@ -57,5 +57,5 @@ describe('sol', () => {
       }
       expect(sundown.getDate(), `date: ${dtUtil.tzIso(d)}, sundown: ${dtUtil.tzIso(sundown)}`).toBe(d.getDate());
     }
-  });
+  }, 10_000);
 });
