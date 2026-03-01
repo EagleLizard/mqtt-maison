@@ -7,7 +7,7 @@ import { z2mCtrl } from './z2m-ctrl';
 import { MqttCtx } from '../models/mqtt-ctx';
 import { MqttMsgEvt, MsgRouter } from '../../cmd/mqtt-ezd/msg-router';
 import { Z2mDeviceService } from './z2m-device-service';
-import { mqttClientMock } from '../util/test/mqtt-client-mock';
+import { MqttClientMock } from '../util/test/mqtt-client-mock';
 import { MaisonDeviceDef } from '../models/maison-device';
 
 vi.mock('../util/sleep.ts', () => {
@@ -26,7 +26,7 @@ describe('z2m-ctrl', () => {
   let z2mDeviceServiceMock: Mocked<Z2mDeviceService>;
   let ctxMock: MqttCtx;
   beforeEach(() => {
-    clientMock = mqttClientMock.init();
+    clientMock = MqttClientMock.init();
     loggerMock = {} as Mocked<pino.Logger>;
     msgRouterMock = {
       sub: vi.fn() as MsgRouter['sub'],
@@ -59,7 +59,7 @@ describe('z2m-ctrl', () => {
     let msgEvt: MqttMsgEvt = {
       topic: topic,
       payload: payloadBuf,
-      packet: mqttClientMock.getMockPubPacket(topic, payloadBuf)
+      packet: MqttClientMock.getMockPubPacket(topic, payloadBuf)
     };
     z2mDeviceServiceMock.getStateMsgEvt.mockResolvedValueOnce(msgEvt);
     let res = await z2mCtrl.getBinaryState(ctxMock, deviceMock);
@@ -83,7 +83,7 @@ describe('z2m-ctrl', () => {
     let msgEvt: MqttMsgEvt = {
       topic: topic,
       payload: payloadBuf,
-      packet: mqttClientMock.getMockPubPacket(topic, payloadBuf)
+      packet: MqttClientMock.getMockPubPacket(topic, payloadBuf)
     };
     let targetPayload = {
       state: targetState,
@@ -92,7 +92,7 @@ describe('z2m-ctrl', () => {
     let targetMsgEvt = {
       topic: topic,
       payload: targetPayloadBuf,
-      packet: mqttClientMock.getMockPubPacket(topic, targetPayloadBuf),
+      packet: MqttClientMock.getMockPubPacket(topic, targetPayloadBuf),
     };
     z2mDeviceServiceMock.getStateMsgEvt.mockImplementationOnce(async () => {
       z2mDeviceServiceMock.getStateMsgEvt.mockResolvedValueOnce(targetMsgEvt);

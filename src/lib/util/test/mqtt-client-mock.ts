@@ -2,7 +2,7 @@ import mqtt from 'mqtt/*';
 import { Mocked, vi } from 'vitest';
 import { prim } from '../validate-primitives';
 
-export const mqttClientMock = {
+export const MqttClientMock = {
   init: init,
   getMockPubPacket: getMockPubPacket,
 } as const;

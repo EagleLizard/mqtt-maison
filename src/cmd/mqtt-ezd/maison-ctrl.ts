@@ -7,11 +7,6 @@ import { z2mCtrl } from '../../lib/service/z2m-ctrl';
 import { sleep } from '../../lib/util/sleep';
 import { MqttMsgEvt } from './msg-router';
 
-/*
-singleton for now
-_*/
-let ctrlInstance: MaisonCtrl | undefined;
-
 type MaisonCtrlCtorOpts = {
   deviceDefs: MaisonDeviceDef[];
 };
@@ -184,11 +179,8 @@ export class MaisonCtrl {
     await actionToggle(ctx, selectedDevice);
   }
 
-  static async init(opts: MaisonCtrlCtorOpts): Promise<MaisonCtrl> {
-    if(ctrlInstance === undefined) {
-      ctrlInstance = new MaisonCtrl(opts);
-    }
-    return ctrlInstance;
+  static init(opts: MaisonCtrlCtorOpts): MaisonCtrl {
+    return new MaisonCtrl(opts);
   }
 }
 

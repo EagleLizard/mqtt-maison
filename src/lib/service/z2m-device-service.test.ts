@@ -6,7 +6,7 @@ import type mqtt from 'mqtt/*';
 import { beforeEach, describe, expect, Mocked, test, vi } from 'vitest';
 import { Z2mDeviceService } from './z2m-device-service';
 import { MqttMsgEvt, MsgRouter, SubOpts } from '../../cmd/mqtt-ezd/msg-router';
-import { mqttClientMock } from '../util/test/mqtt-client-mock';
+import { MqttClientMock } from '../util/test/mqtt-client-mock';
 import { MaisonDeviceDef } from '../models/maison-device';
 
 describe('z2m-device-service', () => {
@@ -62,7 +62,7 @@ describe('z2m-device-service', () => {
     assert(testTopic !== undefined && testMsgCb !== undefined);
     let payloadMock = { topic: testTopic, val: 'test_payload' };
     let payloadBuf = Buffer.from(JSON.stringify(payloadMock));
-    let packetMock = mqttClientMock.getMockPubPacket(testTopic, payloadBuf);
+    let packetMock = MqttClientMock.getMockPubPacket(testTopic, payloadBuf);
     let evtMock: MqttMsgEvt = {
       topic: testTopic,
       payload: payloadBuf,
@@ -98,7 +98,7 @@ describe('z2m-device-service', () => {
     assert(testTopic !== undefined);
     let payloadMock = { topic: testTopic, val: 'test_payload' };
     let payloadBuf = Buffer.from(JSON.stringify(payloadMock));
-    let packetMock = mqttClientMock.getMockPubPacket(testTopic, payloadBuf);
+    let packetMock = MqttClientMock.getMockPubPacket(testTopic, payloadBuf);
     let evtMock: MqttMsgEvt = {
       topic: testTopic,
       payload: payloadBuf,

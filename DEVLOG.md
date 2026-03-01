@@ -5,6 +5,37 @@ This document is intended to keep things focused in the absence of a task manage
 
 The format is roughly reverse-chronological by date.
 
+## [02/22/2026]
+
+### Suncalc Issues
+
+The `suncalc` library has some issues with returning the incorrect sunrise/sunset _date_ for a given date value for some timezones/geo-positions (see: [this github issues](https://github.com/mourner/suncalc/issues/161#issuecomment-2054134528)). The API doesn't specify what it expects the `Date` value to be and per the documentation should accept any date value and resolve the correct times -- however it does not seem to be the case.
+
+I dug into the algorithm a bit. It appears to be doing a similar calculation to what I had attempted, following a popular calculation on Wikipedia that, as a first step, converts the computer Date values in milliseconds to the Julian date. The implementation may have rounding errors and likely does not account for timezones appropriately. Some github issues mention problems with DST calculations.
+
+The repository is not very active wrt fixing currently reported issues; the recent merged PRs are focused mainly on modernizing exports, using Typescript, etc. which, while promising, don't indicate to me that this is likely to be fixed soon.
+
+I may revisit contributing to this project myself to implement a fix. I could also write a test harness to scan through days for sample timezones by day, and do a binary search to find exactly where the discrepancies are.
+
+For now I will explore alternatives to get this working properly without brittle timezone hacks.
+
+### Suncalc Alternatives
+
+#### [`@math.gl/sun`](https://www.npmjs.com/package/@math.gl/sun)
+
+Library for doing geospatial and 3D visualization calculations. Documentation link on npm is broken but the github repository has a working link: https://visgl.github.io/math.gl/
+
+After reading the documentation, this is a fork of `suncalc` and thus it may have the same issues. Additionally, the API documentation doesn't specify _which units it returns_ and the docs simply state "TBD"--a message which is rather stale at ~4 years past.
+
+#### [`sunrise-sunset-js`](https://www.npmjs.com/package/sunrise-sunset-js)
+
+Robust, appears well-written (and well though-out). Low adoption though, which makes me concerned about longevity.
+
+Because this appears to be based on a different algorithm, the NREL's Solar Position Algorithm (SPA), this may be the best bet.
+
+It states the NREL algorithm as accurate and also highlights _timezone support_ as a feature explicitly.
+
+
 ## [02/14/2026]
 
 ### SQLite Background Jobs

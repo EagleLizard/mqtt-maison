@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, Mocked, test, vi } from 'vitest';
 import { MqttMsgEvt, MsgRouter } from './msg-router';
 import pino from 'pino';
 import assert from 'node:assert';
-import { mqttClientMock } from '../../lib/util/test/mqtt-client-mock';
+import { MqttClientMock } from '../../lib/util/test/mqtt-client-mock';
 
 describe('msg-router', () => {
   let mockClient: Mocked<mqtt.MqttClient>;
@@ -115,7 +115,7 @@ describe('msg-router', () => {
       val: 'mock_val',
     } as const;
     let payloadBuf = Buffer.from(JSON.stringify(payloadMock));
-    let packetMock = mqttClientMock.getMockPubPacket(topicMock, payloadBuf);
+    let packetMock = MqttClientMock.getMockPubPacket(topicMock, payloadBuf);
     messageHandlerFn(topicMock, payloadBuf, packetMock);
     expect(subCb).toBeCalledWith({
       topic: topicMock,
@@ -150,7 +150,7 @@ describe('msg-router', () => {
       val: 'mock_val',
     } as const;
     let payloadBuf = Buffer.from(JSON.stringify(payloadMock));
-    let packetMock = mqttClientMock.getMockPubPacket(topicMock, payloadBuf);
+    let packetMock = MqttClientMock.getMockPubPacket(topicMock, payloadBuf);
     subOffCb();
     messageHandlerFn(topicMock, payloadBuf, packetMock);
     expect(subCb).toHaveBeenCalledTimes(0);
