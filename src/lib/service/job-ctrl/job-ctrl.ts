@@ -177,7 +177,8 @@ function queueSundown(d: Date) {
 }
 
 async function doSunupJob(ctx: MqttCtx, job: MnJob) {
-  await Promise.all(sunDevices.map(device => {
+  let suDevices = ctx.z2mDeviceService.getDevicesByGroup('sunup');
+  await Promise.all(suDevices.map(device => {
     return z2mCtrl.setBinaryState(ctx, device, 'OFF');
   }));
   /* queue next _*/
@@ -185,7 +186,8 @@ async function doSunupJob(ctx: MqttCtx, job: MnJob) {
 }
 
 async function doSundownJob(ctx: MqttCtx, job: MnJob) {
-  let devicePromises = sunDevices.map(device => {
+  let sdDevices = ctx.z2mDeviceService.getDevicesByGroup('sundown');
+  let devicePromises = sdDevices.map(device => {
     return z2mCtrl.setBinaryState(ctx, device, 'ON');
   });
   await Promise.all(devicePromises);

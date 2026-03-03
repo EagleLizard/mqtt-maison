@@ -6,7 +6,7 @@ import { MaisonDeviceDef } from '../models/maison-device';
 type Z2mDeviceServiceParams = {
   devices: MaisonDeviceDef[];
   msgRouter: MsgRouter;
-};
+} & {};
 
 type DeviceStateMsg = {
   received_at: number; // timestamp
@@ -29,6 +29,20 @@ export class Z2mDeviceService {
     this.devices = params.devices;
     this.msgRouter = params.msgRouter;
     this.deviceStateStore = new Map();
+  }
+  static async init(params: Z2mDeviceServiceParams): Promise<Z2mDeviceService> {
+    let z2mDeviceService: Z2mDeviceService;
+    z2mDeviceService = new Z2mDeviceService(params);
+    await z2mDeviceService.initStateSubs();
+    return z2mDeviceService;
+  }
+  /* --- */
+
+  getDevicesByGroup(groupName: string): MaisonDeviceDef[] {
+    let devices = this.devices.filter((device) => {
+      return device.groups?.includes(groupName);
+    });
+    return devices;
   }
 
   async getStateMsgEvt(device: MaisonDeviceDef): Promise<MqttMsgEvt> {
@@ -86,11 +100,5 @@ export class Z2mDeviceService {
       deviceStoreItem.initialMsgEvt.resolve(deviceStoreItem.lastMsg.evt);
       deviceStoreItem.initialMsgEvt = undefined;
     }
-  }
-  static async init(params: Z2mDeviceServiceParams): Promise<Z2mDeviceService> {
-    let z2mDeviceService: Z2mDeviceService;
-    z2mDeviceService = new Z2mDeviceService(params);
-    await z2mDeviceService.initStateSubs();
-    return z2mDeviceService;
   }
 }

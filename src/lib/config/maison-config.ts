@@ -13,15 +13,20 @@ const maison_action_topic = `${maison_topic_prefix}/${maison_action_topic_name}`
 const maison_devices: MaisonDeviceDef[] = [
   {
     name: 'croc',
-    groups: [ 'solar' ],
+    groups: [ 'solar', 'sunup', 'sundown' ],
   },
   {
     name: 'rabbit',
-    groups: [ 'action_main', 'solar' ]
+    groups: [ 'action_main', 'solar', 'sunup', 'sundown' ]
   },
-  // {
-  //   name: 'sengled_light_2',
-  // },
+  {
+    name: 'dog',
+    groups: [ 'sundown' ]
+  },
+  {
+    name: 'lemon',
+    groups: [ 'sundown' ]
+  },
   {
     name: 'plum',
     groups: [ 'etc_lights' ],
