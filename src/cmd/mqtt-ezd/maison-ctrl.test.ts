@@ -173,7 +173,7 @@ describe('maison-ctrl', () => {
         return Promise.resolve();
       });
       z2mCtrlMock.waitForBinaryState.mockImplementation(() => {
-        vi.advanceTimersByTime(200);
+        vi.advanceTimersByTime(MaisonCtrl.blink_delay_ms);
         return Promise.resolve();
       });
     });
