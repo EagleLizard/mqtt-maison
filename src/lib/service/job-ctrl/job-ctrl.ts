@@ -14,6 +14,8 @@ import { z2mCtrl } from '../z2m-ctrl';
 import { JobRepo } from '../../db/jobs-db/job-repo';
 import { dtUtil } from '../../util/dt-util';
 
+const hour_ms = dtUtil.hour_ms;
+
 /*
   Simple job scheduler
 
@@ -135,12 +137,6 @@ async function doJob(ctx: MqttCtx, job: MnJob) {
 async function doDailyJob(ctx: MqttCtx, job: MnJob) {
   let now = new Date();
   initSunJobs(now);
-
-  /* todo: remove */
-  // sqlClient.run(`
-  //   delete from jobs
-  //     where id = ?
-  // `, [ job.id ]);
 }
 
 function initSunJobs(d = new Date()) {
@@ -177,20 +173,34 @@ function queueSundown(d: Date) {
 }
 
 async function doSunupJob(ctx: MqttCtx, job: MnJob) {
-  let suDevices = ctx.z2mDeviceService.getDevicesByGroup('sunup');
-  await Promise.all(suDevices.map(device => {
-    return z2mCtrl.setBinaryState(ctx, device, 'OFF');
-  }));
+  let runAt = new Date(job.run_at);
+  let deltaMs = Date.now() - runAt.valueOf();
+  /* don't do old jobs _*/
+  if(deltaMs < (hour_ms * 7)) {
+    let suDevices = ctx.z2mDeviceService.getDevicesByGroup('sunup');
+    await Promise.all(suDevices.map(device => {
+      return z2mCtrl.setBinaryState(ctx, device, 'OFF');
+    }));
+  } else {
+    ctx.logger.info(`Skipping stale '${job.job_type}' job from ${dtUtil.tzIso(runAt)}, run_at is ${deltaMs}ms ago`);
+  }
   /* queue next _*/
   queueSundown(new Date());
 }
 
 async function doSundownJob(ctx: MqttCtx, job: MnJob) {
-  let sdDevices = ctx.z2mDeviceService.getDevicesByGroup('sundown');
-  let devicePromises = sdDevices.map(device => {
-    return z2mCtrl.setBinaryState(ctx, device, 'ON');
-  });
-  await Promise.all(devicePromises);
+  let runAt = new Date(job.run_at);
+  let deltaMs = Date.now() - runAt.valueOf();
+  /* don't do old jobs _*/
+  if(deltaMs < (hour_ms * 3)) {
+    let sdDevices = ctx.z2mDeviceService.getDevicesByGroup('sundown');
+    let devicePromises = sdDevices.map(device => {
+      return z2mCtrl.setBinaryState(ctx, device, 'ON');
+    });
+    await Promise.all(devicePromises);
+  } else {
+    ctx.logger.info(`Skipping stale '${job.job_type}' job from ${dtUtil.tzIso(runAt)}, run_at is ${deltaMs}ms ago`);
+  }
   /* queue next */
   let d = new Date();
   d.setDate(d.getDate() + 1);

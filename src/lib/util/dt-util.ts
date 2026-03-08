@@ -1,5 +1,8 @@
 
+const hour_ms = 1000 * 60 * 60;
+
 export const dtUtil = {
+  hour_ms,
   tzIso: tzIso,
 } as const;
 
@@ -33,4 +36,9 @@ function tzIso(d: Date): string {
 
 function pad0(n: number, len = 2): string {
   return (n + '').padStart(len, '0');
+}
+
+// type TimeUnitShort = 'ms' | 's' | 'm' | 'h' | 'd' | 'm' | ''
+function getIntuitiveTime(ms: number) {
+
 }

@@ -190,20 +190,14 @@ async function blinkBinaryDevice(
 async function actionUp(ctx: MqttCtx, devices: MaisonDeviceDef[]): Promise<void> {
   let targetState = 'ON';
   let upPromises = devices.map((device) => {
-    return z2mCtrl.setBinaryState(ctx, device, targetState)
-      .then(() => {
-        return z2mCtrl.waitForBinaryState(ctx, device, targetState);
-      });
+    return z2mCtrl.setAndWaitForBinaryState(ctx, device, targetState);
   });
   await Promise.all(upPromises);
 }
 async function actionDown(ctx: MqttCtx, devices: MaisonDeviceDef[]): Promise<void> {
   let targetState = 'OFF';
   let downPromises = devices.map((device) => {
-    return z2mCtrl.setBinaryState(ctx, device, targetState)
-      .then(() => {
-        return z2mCtrl.waitForBinaryState(ctx, device, targetState);
-      });
+    return z2mCtrl.setAndWaitForBinaryState(ctx, device, targetState);
   });
   await Promise.all(downPromises);
 }
@@ -246,6 +240,5 @@ async function toggleBinaryState(
     }, 'unrecognized state');
     throw new Error(`Unrecognized state ${currState} for device ${device.name}`);
   }
-  await z2mCtrl.setBinaryState(ctx, device, targetState);
-  await z2mCtrl.waitForBinaryState(ctx, device, targetState);
+  await z2mCtrl.setAndWaitForBinaryState(ctx, device, targetState);
 }

@@ -14,6 +14,7 @@ export const z2mCtrl = {
   getBinaryState: getBinaryState,
   setBinaryState: setBinaryState,
   waitForBinaryState: waitForBinaryState,
+  setAndWaitForBinaryState: setAndWaitForBinaryState,
 } as const;
 
 async function setBinaryState(
@@ -72,4 +73,13 @@ async function getBinaryState(ctx: MqttCtx, device: MaisonDeviceDef): Promise<st
     throw new Error('Expected payload.state to be a string');
   }
   return payload.state;
+}
+
+async function setAndWaitForBinaryState(
+  ctx: MqttCtx,
+  device: MaisonDeviceDef,
+  stateStr: string
+): Promise<void> {
+  await z2mCtrl.setBinaryState(ctx, device, stateStr);
+  await z2mCtrl.waitForBinaryState(ctx, device, stateStr);
 }

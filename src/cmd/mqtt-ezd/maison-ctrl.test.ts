@@ -18,6 +18,7 @@ const z2mCtrlMock: Mocked<typeof z2mCtrl> = vi.hoisted(() => {
     getBinaryState: vi.fn(),
     setBinaryState: vi.fn(),
     waitForBinaryState: vi.fn(),
+    setAndWaitForBinaryState: vi.fn(),
   } as Mocked<typeof z2mCtrl>;
 });
 vi.mock('../../lib/service/z2m-ctrl.ts', () => {
@@ -78,6 +79,7 @@ describe('maison-ctrl', () => {
     z2mCtrlMock.getBinaryState.mockReset();
     z2mCtrlMock.setBinaryState.mockReset();
     z2mCtrlMock.waitForBinaryState.mockReset();
+    z2mCtrlMock.setAndWaitForBinaryState.mockReset();
   });
 
   afterEach(() => {
@@ -98,11 +100,10 @@ describe('maison-ctrl', () => {
     };
     let msgEvt = getMsgEvt(testTopic, payload);
     z2mCtrlMock.getBinaryState.mockReturnValueOnce(Promise.resolve('OFF').finally(() => {
-      z2mCtrlMock.setBinaryState.mockResolvedValueOnce();
-      z2mCtrlMock.waitForBinaryState.mockResolvedValueOnce();
+      z2mCtrlMock.setAndWaitForBinaryState.mockResolvedValueOnce();
     }));
     await maisonCtrl.handleMsg(ctxMock, msgEvt);
-    expect(z2mCtrlMock.waitForBinaryState).toHaveBeenCalled();
+    expect(z2mCtrlMock.setAndWaitForBinaryState).toHaveBeenCalled();
   });
 
   test(`.handleMsg() 'up'`, async () => {
@@ -126,22 +127,11 @@ describe('maison-ctrl', () => {
     await maisonCtrl.handleMsg(ctxMock, msgEvt);
     for(let i = 0; i < devicesMock.length; i++) {
       let device = devicesMock[i];
-      expect(z2mCtrlMock.waitForBinaryState).toHaveBeenCalledWith(ctxMock, device, 'ON');
+      expect(z2mCtrlMock.setAndWaitForBinaryState).toHaveBeenCalledWith(ctxMock, device, 'ON');
     }
   });
 
-  test(`.handleMsg() 'down'`, async () => {
-    let binStateMap: Map<string, string> = new Map();
-    z2mCtrlMock.setBinaryState.mockImplementation((ctx, device, stateStr): Promise<void> => {
-      binStateMap.set(device.name, stateStr);
-      return Promise.resolve();
-    });
-    z2mCtrlMock.waitForBinaryState.mockImplementation((ctx, device, targetState): Promise<void> => {
-      if(binStateMap.get(device.name) !== targetState) {
-        return Promise.reject(new Error(`No setBinState call for device: ${device.name}`));
-      }
-      return Promise.resolve();
-    });
+  test(`.handleMsg() 'down'`, async () => {;
     let dob = new Date();
     let payload: MaisonActionPayload = {
       action: 'down',
@@ -151,7 +141,7 @@ describe('maison-ctrl', () => {
     await maisonCtrl.handleMsg(ctxMock, msgEvt);
     for(let i = 0; i < devicesMock.length; i++) {
       let device = devicesMock[i];
-      expect(z2mCtrlMock.waitForBinaryState).toHaveBeenCalledWith(ctxMock, device, 'OFF');
+      expect(z2mCtrlMock.setAndWaitForBinaryState).toHaveBeenCalledWith(ctxMock, device, 'OFF');
     }
   });
 
@@ -168,11 +158,8 @@ describe('maison-ctrl', () => {
       z2mCtrlMock.getBinaryState.mockImplementation((ctx, device) => {
         return Promise.resolve(blinkBinState);
       });
-      z2mCtrlMock.setBinaryState.mockImplementation((ctx, device, stateStr) => {
+      z2mCtrlMock.setAndWaitForBinaryState.mockImplementation((ctx, device, stateStr) => {
         blinkBinState = stateStr;
-        return Promise.resolve();
-      });
-      z2mCtrlMock.waitForBinaryState.mockImplementation(() => {
         vi.advanceTimersByTime(MaisonCtrl.blink_delay_ms);
         return Promise.resolve();
       });
@@ -192,7 +179,7 @@ describe('maison-ctrl', () => {
       _*/
       let prevDevice = seekDevices[seekDevices.length - 1];
       expect(z2mCtrlMock.getBinaryState).toHaveBeenCalled();
-      expect(z2mCtrlMock.setBinaryState).toHaveBeenCalled();
+      expect(z2mCtrlMock.setAndWaitForBinaryState).toHaveBeenCalled();
       expect(z2mCtrlMock.getBinaryState).toHaveBeenCalledWith(ctxMock, prevDevice);
       expect(z2mCtrlMock.getBinaryState).not.toHaveBeenCalledWith(ctxMock, seekDevices[0]);
     });
@@ -211,7 +198,7 @@ describe('maison-ctrl', () => {
       _*/
       let nextDevice = seekDevices[1];
       expect(z2mCtrlMock.getBinaryState).toHaveBeenCalled();
-      expect(z2mCtrlMock.setBinaryState).toHaveBeenCalled();
+      expect(z2mCtrlMock.setAndWaitForBinaryState).toHaveBeenCalled();
       expect(z2mCtrlMock.getBinaryState).toHaveBeenCalledWith(ctxMock, nextDevice);
       expect(z2mCtrlMock.getBinaryState).not.toHaveBeenCalledWith(ctxMock, seekDevices[0]);
     });
@@ -225,7 +212,7 @@ describe('maison-ctrl', () => {
       let msgEvt = getMsgEvt(testTopic, payload);
       await maisonCtrl.handleMsg(ctxMock, msgEvt);
       expect(z2mCtrlMock.getBinaryState).toHaveBeenCalled();
-      expect(z2mCtrlMock.setBinaryState).toHaveBeenCalled();
+      expect(z2mCtrlMock.setAndWaitForBinaryState).toHaveBeenCalled();
       expect(z2mCtrlMock.getBinaryState).toHaveBeenCalledWith(ctxMock, seekDevices[0]);
     });
   });
