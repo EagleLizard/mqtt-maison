@@ -38,9 +38,9 @@ export class Z2mDeviceService {
   }
   /* --- */
 
-  getDevicesByGroup(groupName: string): MaisonDeviceDef[] {
+  getDevicesByTag(groupName: string): MaisonDeviceDef[] {
     let devices = this.devices.filter((device) => {
-      return device.groups?.includes(groupName);
+      return device.tags?.includes(groupName);
     });
     return devices;
   }

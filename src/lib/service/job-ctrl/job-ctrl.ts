@@ -12,9 +12,8 @@ import { MqttCtx } from '../../models/mqtt-ctx';
 import { maisonConfig } from '../../config/maison-config';
 import { z2mCtrl } from '../z2m-ctrl';
 import { JobRepo } from '../../db/jobs-db/job-repo';
-import { dtUtil } from '../../util/dt-util';
-
-const hour_ms = dtUtil.hour_ms;
+import { SunupJob } from './sunup-job';
+import { SundownJob } from './sundown-job';
 
 /*
   Simple job scheduler
@@ -31,12 +30,10 @@ const jobs_db_init_script_path = [
   'init-jobs.sql',
 ].join(path.sep);
 
-const sunDevices = maisonConfig.maison_devices.filter(device => {
-  return device.groups?.includes('solar');
-});
-
 let sqlClient: SqliteClient;
 let jobRepo: JobRepo;
+let sunupJob: SunupJob;
+let sundownJob: SundownJob;
 
 (function _init() {
   /*
@@ -52,6 +49,8 @@ let jobRepo: JobRepo;
   jobRepo = JobRepo.init({
     sqlClient: sqlClient,
   });
+  sunupJob = SunupJob.init(jobRepo);
+  sundownJob = SundownJob.init(jobRepo);
 })();
 
 export const JobCtrl = {
@@ -124,10 +123,10 @@ async function doJob(ctx: MqttCtx, job: MnJob) {
       await doDailyJob(ctx, job);
       break;
     case 'sunup':
-      await doSunupJob(ctx, job);
+      await sunupJob.run(ctx, job);
       break;
     case 'sundown':
-      await doSundownJob(ctx, job);
+      await sundownJob.run(ctx, job);
       break;
     default:
       throw new EzdError('invalid job type', 'JB_0.2');
@@ -142,69 +141,15 @@ async function doDailyJob(ctx: MqttCtx, job: MnJob) {
 function initSunJobs(d = new Date()) {
   let sunup = sol.getSunup(d);
   if(d <= sunup) {
-    queueSunup(d);
+    sunupJob.enqueue(d);
     return;
   }
   // sunup in the past
   let sundown = sol.getSundown(d);
   if(d <= sundown) {
-    queueSundown(d);
+    sundownJob.enqueue(d);
     return;
   }
-}
-
-function queueSunup(d: Date) {
-  let sunupJob = jobRepo.getSunupJob(d);
-  if(sunupJob !== undefined) {
-    return;
-  }
-  let sunupTs = sol.getSunup(d);
-  logger.info(`queueing sunup job for ${dtUtil.tzIso(sunupTs)}`);
-  jobRepo.enqueue('sunup', sunupTs);
-}
-function queueSundown(d: Date) {
-  let sundownJob = jobRepo.getSundownJob(d);
-  if(sundownJob !== undefined) {
-    return;
-  }
-  let sundownTs = sol.getSundown(d);
-  logger.info(`queueing sundown job for ${dtUtil.tzIso(sundownTs)}`);
-  jobRepo.enqueue('sundown', sundownTs);
-}
-
-async function doSunupJob(ctx: MqttCtx, job: MnJob) {
-  let runAt = new Date(job.run_at);
-  let deltaMs = Date.now() - runAt.valueOf();
-  /* don't do old jobs _*/
-  if(deltaMs < (hour_ms * 7)) {
-    let suDevices = ctx.z2mDeviceService.getDevicesByGroup('sunup');
-    await Promise.all(suDevices.map(device => {
-      return z2mCtrl.setBinaryState(ctx, device, 'OFF');
-    }));
-  } else {
-    ctx.logger.info(`Skipping stale '${job.job_type}' job from ${dtUtil.tzIso(runAt)}, run_at is ${deltaMs}ms ago`);
-  }
-  /* queue next _*/
-  queueSundown(new Date());
-}
-
-async function doSundownJob(ctx: MqttCtx, job: MnJob) {
-  let runAt = new Date(job.run_at);
-  let deltaMs = Date.now() - runAt.valueOf();
-  /* don't do old jobs _*/
-  if(deltaMs < (hour_ms * 3)) {
-    let sdDevices = ctx.z2mDeviceService.getDevicesByGroup('sundown');
-    let devicePromises = sdDevices.map(device => {
-      return z2mCtrl.setBinaryState(ctx, device, 'ON');
-    });
-    await Promise.all(devicePromises);
-  } else {
-    ctx.logger.info(`Skipping stale '${job.job_type}' job from ${dtUtil.tzIso(runAt)}, run_at is ${deltaMs}ms ago`);
-  }
-  /* queue next */
-  let d = new Date();
-  d.setDate(d.getDate() + 1);
-  queueSunup(d);
 }
 
 async function doTestJob(ctx: MqttCtx, job: MnJob) {

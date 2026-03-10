@@ -43,19 +43,19 @@ describe('maison-ctrl', () => {
     devicesMock = [
       {
         name: 'test_0',
-        groups: [ 'action_main' ],
+        tags: [ 'action_main' ],
       },
       {
         name: 'test_light_0',
-        groups: [ 'etc_lights' ],
+        tags: [ 'etc_lights' ],
       },
       {
         name: 'test_light_1',
-        groups: [ 'etc_lights' ],
+        tags: [ 'etc_lights' ],
       },
       {
         name: 'test_light_2',
-        groups: [ 'etc_lights' ],
+        tags: [ 'etc_lights' ],
       },
     ];
     testTopic = 'ezd/test_topic';
@@ -152,7 +152,7 @@ describe('maison-ctrl', () => {
     beforeEach(() => {
       blinkBinState = 'OFF';
       seekDevices = devicesMock.filter((device) => {
-        return device.groups?.includes('etc_lights');
+        return device.tags?.includes('etc_lights');
       });
 
       z2mCtrlMock.getBinaryState.mockImplementation((ctx, device) => {

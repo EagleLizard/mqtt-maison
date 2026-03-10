@@ -13,27 +13,27 @@ const maison_action_topic = `${maison_topic_prefix}/${maison_action_topic_name}`
 const maison_devices: MaisonDeviceDef[] = [
   {
     name: 'croc',
-    groups: [ 'solar', 'sunup', 'sundown' ],
+    tags: [ 'solar', 'sunup', 'sundown' ],
   },
   {
     name: 'rabbit',
-    groups: [ 'action_main', 'solar', 'sunup', 'sundown' ]
+    tags: [ 'action_main', 'solar', 'sunup', 'sundown' ]
   },
   {
     name: 'dog',
-    groups: [ 'sundown' ]
+    tags: [ 'sundown' ]
   },
   {
     name: 'lemon',
-    groups: [ 'sundown' ]
+    tags: [ 'sunup_w', 'sundown' ]
   },
   {
     name: 'plum',
-    groups: [ 'etc_lights' ],
+    tags: [ 'etc_lights' ],
   },
   {
     name: 'sengled_light_1',
-    groups: [ 'etc_lights' ],
+    tags: [ 'etc_lights' ],
   },
   {
     /* broken? _*/

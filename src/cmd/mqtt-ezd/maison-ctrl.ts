@@ -27,10 +27,10 @@ export class MaisonCtrl {
   private constructor(opts: MaisonCtrlCtorOpts) {
     this.deviceDefs = opts.deviceDefs;
     this.actionMainDeviceDefs = this.deviceDefs.filter((device) => {
-      return device.groups?.includes('action_main');
+      return device.tags?.includes('action_main');
     });
     this.etcLightDeviceDefs = this.deviceDefs.filter((device) => {
-      return device.groups?.includes('etc_lights');
+      return device.tags?.includes('etc_lights');
     });
     this.selectedDeviceIdx = 0;
     this.inProgressMap = {};
@@ -61,7 +61,7 @@ export class MaisonCtrl {
     let startMs = Date.now();
     let msgDob = new Date(payload.dob);
     let msgAgeMs = startMs - msgDob.valueOf();
-    ctx.logger.info(`[start] maisonCtrl.handleMsg() | ${evt.topic}: ${payload.action} | age: ${msgAgeMs}ms`);
+    ctx.logger.debug(`[start] maisonCtrl.handleMsg() | ${evt.topic}: ${payload.action} | age: ${msgAgeMs}ms`);
     let msgFn = this.msgHandlerMap.get(payload.action);
     if(msgFn === undefined) {
       ctx.logger.info(`unhandled action ${evt.topic}: '${payload.action}'`);
@@ -72,7 +72,7 @@ export class MaisonCtrl {
       This exists here to debug cases where the handler hangs and never resolves.
         Any async operations should either resolve / reject or timeout.
     _*/
-    ctx.logger.info(`[end] maisonCtrl.handleMsg() | ${evt.topic}: ${payload.action} | ${endMs - startMs}ms`);
+    ctx.logger.debug(`[end] maisonCtrl.handleMsg() | ${evt.topic}: ${payload.action} | ${endMs - startMs}ms`);
   }
 
   private async handleMain(ctx: MqttCtx) {
