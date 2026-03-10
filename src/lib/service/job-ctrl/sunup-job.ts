@@ -24,7 +24,7 @@ export class SunupJob {
     let runAt = new Date(job.run_at);
     let deltaMs = Date.now() - runAt.valueOf();
     /* don't do old jobs _*/
-    if(deltaMs < (dtUtil.hour_ms * 70)) {
+    if(deltaMs < (dtUtil.hour_ms * 7)) {
       let suDevices = ctx.z2mDeviceService.getDevicesByTag('sunup');
       await Promise.all(suDevices.map(device => {
         return z2mCtrl.setBinaryState(ctx, device, 'OFF');
