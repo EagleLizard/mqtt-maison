@@ -6,7 +6,6 @@ import { DB_DIR_PATH, DATA_DIR_PATH } from '../../../constants';
 import { SqliteClient } from '../../db/sqlite-client';
 import { EzdError } from '../../models/error/ezd-error';
 import { MnJob } from '../../models/jobs/mn-job';
-import { logger } from '../../logger/logger';
 import { sol } from '../../util/sol';
 import { MqttCtx } from '../../models/mqtt-ctx';
 import { maisonConfig } from '../../config/maison-config';
@@ -14,6 +13,7 @@ import { z2mCtrl } from '../z2m-ctrl';
 import { JobRepo } from '../../db/jobs-db/job-repo';
 import { SunupJob } from './sunup-job';
 import { SundownJob } from './sundown-job';
+import { ezdConfig } from '../../../config';
 
 /*
   Simple job scheduler
@@ -63,7 +63,8 @@ function enqueue(jobType: string, runAt = new Date()): MnJob {
 }
 
 function run(ctx: MqttCtx) {
-  checkDailyJobs();
+  _dbg(ctx);
+  checkDailyJobs(ctx);
   /* loop _*/
   (function loop() {
     setTimeout(() => {
@@ -79,23 +80,51 @@ function run(ctx: MqttCtx) {
   }
 }
 
-function checkDailyJobs() {
+function _dbg(ctx: MqttCtx) {
+  if(!ezdConfig.isDevEnv()) {
+    return;
+  }
+  ctx.logger.debug('!!! _dbg() !!!');
+
+  let d = new Date();
+  d.setHours(0,0,0,0);
+  let d2 = new Date(d.valueOf());
+  d2.setDate(d.getDate() + 1);
+  console.log(sqlClient.run(`
+    delete from jobs
+      where id in (
+        select id from jobs
+          where run_at >= ?
+            and run_at < ?
+            and (
+              job_type = 'daily'
+              or job_type = 'sundown'
+              or job_type = 'sunup'
+            )
+      )
+  `, [
+    d.toISOString(),
+    d2.toISOString(),
+  ]));
+}
+
+function checkDailyJobs(ctx: MqttCtx) {
   let today = new Date();
   today.setHours(0,0,0,0);
   let todaysJob = jobRepo.getOnceDailyJob(today);
   if(todaysJob === undefined) {
-    logger.warn('no daily job found for today');
+    ctx.logger.warn('no daily job found for today');
     JobCtrl.enqueue('daily', today);
   }
 }
 
-function completeJob(job: MnJob) {
+function completeJob(ctx: MqttCtx, job: MnJob) {
   jobRepo.completeJob(job);
-  logger.info(`Completed '${job.job_type}' job ${job.id}`);
+  ctx.logger.info(`Completed '${job.job_type}' job ${job.id}`);
 }
-function failJob(job: MnJob, reason: string, code: string) {
+function failJob(ctx: MqttCtx, job: MnJob, reason: string, code: string) {
   jobRepo.failJob(job);
-  logger.error(new EzdError(reason, code));
+  ctx.logger.error(new EzdError(reason, code));
 }
 
 async function execJob(ctx: MqttCtx, job: MnJob) {
@@ -103,15 +132,15 @@ async function execJob(ctx: MqttCtx, job: MnJob) {
     await doJob(ctx, job);
   } catch(e) {
     if(e instanceof EzdError) {
-      failJob(job, e.message, e.code);
+      failJob(ctx, job, e.message, e.code);
     } else if(e instanceof Error) {
-      failJob(job, e.message, 'JB_0.3');
+      failJob(ctx, job, e.message, 'JB_0.3');
     } else {
-      failJob(job, 'Job failed to to an unexpected error', 'JB_0.4');
+      failJob(ctx, job, 'Job failed to to an unexpected error', 'JB_0.4');
     }
   } finally {
     /* should only complete non-failed jobs _*/
-    completeJob(job);
+    completeJob(ctx, job);
   }
 }
 async function doJob(ctx: MqttCtx, job: MnJob) {
@@ -135,21 +164,8 @@ async function doJob(ctx: MqttCtx, job: MnJob) {
 
 async function doDailyJob(ctx: MqttCtx, job: MnJob) {
   let now = new Date();
-  initSunJobs(now);
-}
-
-function initSunJobs(d = new Date()) {
-  let sunup = sol.getSunup(d);
-  if(d <= sunup) {
-    sunupJob.enqueue(d);
-    return;
-  }
-  // sunup in the past
-  let sundown = sol.getSundown(d);
-  if(d <= sundown) {
-    sundownJob.enqueue(d);
-    return;
-  }
+  sunupJob.enqueue(now);
+  sundownJob.enqueue(now);
 }
 
 async function doTestJob(ctx: MqttCtx, job: MnJob) {

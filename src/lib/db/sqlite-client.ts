@@ -23,7 +23,7 @@ export type ISqliteClient = {
     <Fn extends (...params: unknown[]) => void>(fn: Fn): Transaction<Fn>;
   };
   all: {
-    <T extends unknown[], R = unknown>(source: string, ...params: T): R[] | undefined;
+    <T extends unknown[], R = unknown>(source: string, ...params: T): R[];
   };
   get: {
     <T extends unknown[], R = unknown>(source: string, ...params: T): R | undefined;
@@ -48,7 +48,7 @@ export class SqliteClient implements ISqliteClient {
     let txnFn = this._db.transaction(fn);
     return txnFn;
   }
-  all<T extends unknown[], R = unknown>(source: string, ...params: T): R[] | undefined {
+  all<T extends unknown[], R = unknown>(source: string, ...params: T): R[] {
     let stmt = this._db.prepare<T, R>(source);
     return stmt.all(...params);
   }
