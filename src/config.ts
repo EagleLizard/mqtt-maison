@@ -18,6 +18,8 @@ export const ezdConfig = {
     longitude: getNumberEnvVar('sun_longitude'),
     elevation_ft: getNumberEnvVar('sun_elevation_ft'),
   },
+  ha_token: process.env['ha_token'] ?? '',
+  skipSundown: getBoolEnvVar('SKIP_SUNDOWN'),
   getMqttConfig,
   isDevEnv: isDevEnv,
   getEnvironment,
@@ -59,6 +61,12 @@ function getNumberEnvVar(envKey: string): number {
     throw new Error(`invalid env var ${envKey}, expected 'number'`);
   }
   return portNum;
+}
+
+function getBoolEnvVar(envKey: string): boolean {
+  let rawBoolVal = process.env[envKey] ?? '';
+  let boolVal = rawBoolVal.toLowerCase() === 'true';
+  return boolVal;
 }
 
 function getEnvVarOrErr(envKey: string): string {

@@ -1,4 +1,5 @@
 
+import { ezdConfig } from '../../../config';
 import { JobRepo } from '../../db/jobs-db/job-repo';
 import { logger } from '../../logger/logger';
 import { MnJob } from '../../models/jobs/mn-job';
@@ -19,7 +20,9 @@ export class SundownJob {
     let runAt = new Date(job.run_at);
     let deltaMs = Date.now() - runAt.valueOf();
     /* don't do old jobs _*/
-    if(deltaMs < (dtUtil.hour_ms * 3)) {
+    if(ezdConfig.skipSundown) {
+      ctx.logger.info(`Skipping '${job.job_type}' job based on config val.`);
+    } else if(deltaMs < (dtUtil.hour_ms * 3)) {
       let sdDevices = ctx.z2mDeviceService.getDevicesByTag('sundown');
       let devicePromises = sdDevices.map(device => {
         return z2mCtrl.setBinaryState(ctx, device, 'ON');
