@@ -4,6 +4,7 @@
     simulate running jobs for every day of the year, starting at 2026-1-1
 _*/
 
+import { ezdConfig } from '../../../config';
 import { JobRepo } from '../../db/jobs-db/job-repo';
 import { logger } from '../../logger/logger';
 import { MnJob } from '../../models/jobs/mn-job';
@@ -23,8 +24,10 @@ export class SunupJob {
   async run(ctx: MqttCtx, job: MnJob) {
     let runAt = new Date(job.run_at);
     let deltaMs = Date.now() - runAt.valueOf();
-    /* don't do old jobs _*/
-    if(deltaMs < (dtUtil.hour_ms * 7)) {
+    if(ezdConfig.skipSunup) {
+      ctx.logger.info(`Skipping '${job.job_type}' job based on config val.`);
+    } else if(deltaMs < (dtUtil.hour_ms * 7)) {
+      /* don't do old jobs _*/
       let suDevices = ctx.z2mDeviceService.getDevicesByTag('sunup');
       await Promise.all(suDevices.map(device => {
         return z2mCtrl.setBinaryState(ctx, device, 'OFF');

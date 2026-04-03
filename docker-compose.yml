@@ -11,6 +11,7 @@ services:
       - mqtt_password=${mqtt_password}
       - ENVIRONMENT=${ENVIRONMENT}
       - SKIP_SUNDOWN=${SKIP_SUNDOWN}
+      - SKIP_SUNUP=${SKIP_SUNUP}
       - sun_latitude=${sun_latitude}
       - sun_longitude=${sun_longitude}
       - sun_elevation_ft=${sun_elevation_ft}

@@ -20,6 +20,7 @@ export const ezdConfig = {
   },
   ha_token: process.env['ha_token'] ?? '',
   skipSundown: getBoolEnvVar('SKIP_SUNDOWN'),
+  skipSunup: getBoolEnvVar('SKIP_SUNUP'),
   getMqttConfig,
   isDevEnv: isDevEnv,
   getEnvironment,
